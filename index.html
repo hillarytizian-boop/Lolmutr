@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>@loltimur24 4K Temple Run</title>
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    body {
+        margin: 0;
+        overflow: hidden;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #111;
+        color: #fff;
+        text-align: center;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        touch-action: none;
+    }
+    
+    #gameContainer {
+        position: relative;
+        box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        border: 4px solid #444;
+        border-radius: 8px;
+        overflow: hidden;
+        max-width: 100vw;
+        max-height: 60vh;
+    }
+    
+    canvas {
+        display: block;
+        background: #000;
+        max-width: 100%;
+        height: auto;
+    }
+    
+    h1 { 
+        margin: 10px 0; 
+        font-size: clamp(20px, 5vw, 32px); 
+        text-shadow: 2px 2px 4px #000;
+        color: #ffd700;
+        letter-spacing: 2px;
+    }
+    
+    #score { 
+        font-size: clamp(18px, 4vw, 28px); 
+        margin: 10px; 
+        font-weight: bold;
+        text-shadow: 1px 1px 2px #000;
+    }
+    
+    #gameOver { 
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none; 
+        font-size: clamp(32px, 8vw, 64px); 
+        color: #ff4444; 
+        font-weight: bold;
+        text-shadow: 4px 4px 0px #000;
+        background: rgba(0,0,0,0.85);
+        padding: 20px 40px;
+        border-radius: 10px;
+        border: 2px solid #ff4444;
+        z-index: 10;
+        white-space: nowrap;
+    }
+    
+    #restartBtn { 
+        position: absolute;
+        top: 65%;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none; 
+        font-size: clamp(18px, 4vw, 24px); 
+        padding: 15px 40px; 
+        cursor: pointer; 
+        background: linear-gradient(180deg, #ffd700, #ff8c00);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        transition: transform 0.2s, box-shadow 0.2s;
+        z-index: 11;
+    }
+    
+    #restartBtn:hover, #restartBtn:active {
+        transform: translateX(-50%) scale(1.05);
+        box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+    }
+    
+    #instructions {
+        margin: 10px;
+        color: #888;
+        font-size: clamp(12px, 3vw, 14px);
+        padding: 0 10px;
+    }
+    
+    .key {
+        display: inline-block;
+        background: #333;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid #555;
+        margin: 0 3px;
+        font-family: monospace;
+        color: #fff;
+        font-size: inherit;
+    }
+    
+    /* Mobile Controls */
+    #mobileControls {
+        display: none;
+        width: 100%;
+        max-width: 600px;
+        padding: 20px;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .controlBtn {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        border: 3px solid #ffd700;
+        background: linear-gradient(180deg, #444, #222);
+        color: #ffd700;
+        font-size: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        transition: transform 0.1s, background 0.1s;
+    }
+    
+    .controlBtn:active, .controlBtn.active {
+        transform: scale(0.9);
+        background: linear-gradient(180deg, #ffd700, #ff8c00);
+        color: #000;
+    }
+    
+    .controlBtn.jump {
+        width: 100px;
+        height: 100px;
+        font-size: 24px;
+    }
+    
+    .controlRow {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        width: 100%;
+    }
+    
+    #startScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+    }
+    
+    #startScreen h2 {
+        font-size: clamp(24px, 6vw, 48px);
+        color: #ffd700;
+        margin-bottom: 20px;
+        text-shadow: 2px 2px 4px #000;
+    }
+    
+    #startBtn {
+        font-size: clamp(20px, 5vw, 32px);
+        padding: 20px 60px;
+        background: linear-gradient(180deg, #ffd700, #ff8c00);
+        color: #000;
+        border: none;
+        border-radius: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5);
+        transition: transform 0.2s;
+    }
+    
+    #startBtn:hover, #startBtn:active {
+        transform: scale(1.05);
+    }
+    
+    @media (max-width: 768px) {
+        #mobileControls {
+            display: flex;
+        }
+        #instructions {
+            display: none;
+        }
+    }
+    
+    /* Swipe indicator */
+    #swipeIndicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 48px;
+        color: rgba(255, 215, 0, 0.5);
+        pointer-events: none;
+        display: none;
+        z-index: 15;
+    }
+</style>
+</head>
+<body>
+
+<h1>🏃 @loltimur24 TEMPLE RUN 🏃</h1>
+<div id="score">Score: 0 | Coins: 0</div>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+    <div id="gameOver">GAME OVER</div>
+    <button id="restartBtn" onclick="restartGame()">🔄 RESTART</button>
+    <div id="startScreen">
+        <h2>🏛️ TEMPLE RUN 🏛️</h2>
+        <button id="startBtn" onclick="startGame()">▶️ START</button>
+    </div>
+    <div id="swipeIndicator">⬆️</div>
+</div>
+
+<div id="mobileControls">
+    <div class="controlRow">
+        <div class="controlBtn" id="btnLeft" ontouchstart="handleMobileInput('left')" onmousedown="handleMobileInput('left')">⬅️</div>
+        <div class="controlBtn jump" id="btnJump" ontouchstart="handleMobileInput('jump')" onmousedown="handleMobileInput('jump')">⬆️ JUMP</div>
+        <div class="controlBtn" id="btnRight" ontouchstart="handleMobileInput('right')" onmousedown="handleMobileInput('right')">➡️</div>
+    </div>
+</div>
+
+<div id="instructions">
+    <strong>Controls:</strong> 
+    <span class="key">←</span> <span class="key">→</span> Move | 
+    <span class="key">Space</span> / <span class="key">↑</span> Jump | 
+    <strong>Mobile:</strong> Swipe or use buttons below
+</div>
+
+<script>
+// --- Setup ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreDisplay = document.getElementById('score');
+const gameOverText = document.getElementById('gameOver');
+const restartBtn = document.getElementById('restartBtn');
+const startScreen = document.getElementById('startScreen');
+const swipeIndicator = document.getElementById('swipeIndicator');
+
+// --- Game State ---
+let score = 0;
+let coinsCollected = 0;
+let gameSpeed = 12;
+let gameRunning = false;
+let gameStarted = false;
+let bgX = 0;
+let frameCount = 0;
+let animationFrame = 0;
+
+// --- Asset Loading ---
+const playerRunImg = new Image();
+playerRunImg.src = 'https://image.qwenlm.ai/public_source/ace57d88-04a9-47f6-b54f-a84e5d3ad8c6/13e926a9a-e549-47cf-9aa2-8b9f4a47c302.png';
+
+const playerJumpImg = new Image();
+playerJumpImg.src = 'https://image.qwenlm.ai/public_source/ace57d88-04a9-47f6-b54f-a84e5d3ad8c6/133690ae2-9f65-4dce-ad2b-00365bb1eac6.png';
+
+const coinImg = new Image();
+coinImg.src = 'https://image.qwenlm.ai/public_source/ace57d88-04a9-47f6-b54f-a84e5d3ad8c6/1ca1d4724-11de-4269-a534-7e46da25418f.png';
+
+const bgImg = new Image();
+bgImg.src = 'https://image.qwenlm.ai/public_source/ace57d88-04a9-47f6-b54f-a84e5d3ad8c6/17901c2bb-0bd4-4222-abef-a94e8a43465f.png';
+
+// --- Player Configuration ---
+const lanes = [350, 550, 750];
+let currentLane = 1;
+
+const player = {
+    x: 200,
+    y: lanes[currentLane],
+    targetY: lanes[currentLane],
+    width: 128,
+    height: 128,
+    dy: 0,
+    gravity: 1.2,
+    jumpPower: -28,
+    grounded: true,
+    frameIndex: 0,
+    frameTimer: 0,
+    isJumping: false
+};
+
+// --- Entities ---
+const obstacles = [];
+const coins = [];
+const powerups = [];
+
+const obstacleFreq = 70;
+const coinFreq = 50;
+const powerupFreq = 400;
+
+// --- Controls ---
+const keys = {};
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+
+document.addEventListener('keydown', e => {
+    keys[e.key] = true;
+    handleInput(e.key);
+});
+
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+// Touch/Swipe Controls
+canvas.addEventListener('touchstart', handleTouchStart, {passive: false});
+canvas.addEventListener('touchmove', handleTouchMove, {passive: false});
+canvas.addEventListener('touchend', handleTouchEnd, {passive: false});
+
+function handleTouchStart(e) {
+    e.preventDefault();
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+}
+
+function handleTouchMove(e) {
+    e.preventDefault();
+}
+
+function handleTouchEnd(e) {
+    e.preventDefault();
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const touchDuration = Date.now() - touchStartTime;
+    
+    const diffX = touchEndX - touchStartX;
+    const diffY = touchEndY - touchStartY;
+    
+    // Determine swipe direction
+    if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 50) {
+        // Vertical swipe
+        if (diffY < 0 && player.grounded) {
+            // Swipe up - jump
+            player.dy = player.jumpPower;
+            player.grounded = false;
+            player.isJumping = true;
+            showSwipeIndicator('⬆️');
+        }
+    } else if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+        // Horizontal swipe
+        if (diffX < 0 && currentLane > 0) {
+            // Swipe left
+            currentLane--;
+            player.targetY = lanes[currentLane];
+            showSwipeIndicator('⬅️');
+        } else if (diffX > 0 && currentLane < lanes.length - 1) {
+            // Swipe right
+            currentLane++;
+            player.targetY = lanes[currentLane];
+            showSwipeIndicator('➡️');
+        }
+    } else if (touchDuration < 200 && Math.abs(diffY) < 10 && Math.abs(diffX) < 10) {
+        // Tap - jump
+        if (player.grounded) {
+            player.dy = player.jumpPower;
+            player.grounded = false;
+            player.isJumping = true;
+        }
+    }
+}
+
+function handleMobileInput(action) {
+    if (!gameRunning) return;
+    
+    const btn = document.getElementById('btn' + action.charAt(0).toUpperCase() + action.slice(1));
+    if (btn) {
+        btn.classList.add('active');
+        setTimeout(() => btn.classList.remove('active'), 150);
+    }
+    
+    if (action === 'left' && currentLane > 0) {
+        currentLane--;
+        player.targetY = lanes[currentLane];
+    } else if (action === 'right' && currentLane < lanes.length - 1) {
+        currentLane++;
+        player.targetY = lanes[currentLane];
+    } else if (action === 'jump' && player.grounded) {
+        player.dy = player.jumpPower;
+        player.grounded = false;
+        player.isJumping = true;
+    }
+}
+
+function handleInput(key) {
+    if (!gameRunning) return;
+
+    if ((key === ' ' || key === 'ArrowUp') && player.grounded) {
+        player.dy = player.jumpPower;
+        player.grounded = false;
+        player.isJumping = true;
+    }
+    
+    if (key === 'ArrowLeft' && currentLane > 0) {
+        currentLane--;
+        player.targetY = lanes[currentLane];
+    }
+    if (key === 'ArrowRight' && currentLane < lanes.length - 1) {
+        currentLane++;
+        player.targetY = lanes[currentLane];
+    }
+}
+
+function showSwipeIndicator(symbol) {
+    swipeIndicator.textContent = symbol;
+    swipeIndicator.style.display = 'block';
+    setTimeout(() => {
+        swipeIndicator.style.display = 'none';
+    }, 500);
+}
+
+// --- Spawning ---
+function spawnObstacle() {
+    const laneIndex = Math.floor(Math.random() * lanes.length);
+    obstacles.push({
+        x: canvas.width + 100,
+        y: lanes[laneIndex] + 48,
+        width: 80,
+        height: 80,
+        type: Math.random() > 0.5 ? 'rock' : 'log'
+    });
+}
+
+function spawnCoin() {
+    const laneIndex = Math.floor(Math.random() * lanes.length);
+    coins.push({
+        x: canvas.width + 100,
+        y: lanes[laneIndex] + 20,
+        width: 64,
+        height: 64,
+        frameIndex: 0,
+        frameTimer: 0
+    });
+}
+
+function spawnPowerup() {
+    const laneIndex = Math.floor(Math.random() * lanes.length);
+    powerups.push({
+        x: canvas.width + 100,
+        y: lanes[laneIndex],
+        width: 70,
+        height: 70,
+        type: 'shield'
+    });
+}
+
+// --- Physics & Updates ---
+function updatePlayer() {
+    if (!gameRunning) return;
+
+    // Smooth lane transition
+    player.y += (player.targetY - player.y) * 0.25;
+
+    // Jump physics
+    player.dy += player.gravity;
+    player.y += player.dy;
+
+    // Ground collision
+    if (player.y >= player.targetY) {
+        player.y = player.targetY;
+        player.dy = 0;
+        player.grounded = true;
+        player.isJumping = false;
+    }
+
+    // Animation
+    player.frameTimer++;
+    if (player.frameTimer >= 5) {
+        player.frameTimer = 0;
+        player.frameIndex = (player.frameIndex + 1) % 8;
+    }
+}
+
+function updateEntities() {
+    if (!gameRunning) return;
+
+    // Obstacles
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= gameSpeed;
+
+        // Collision
+        if (player.x + 30 < obs.x + obs.width &&
+            player.x + player.width - 30 > obs.x &&
+            player.y + 20 < obs.y + obs.height &&
+            player.y + player.height - 20 > obs.y) {
+            endGame();
+        }
+
+        if (obs.x + obs.width < 0) {
+            obstacles.splice(i, 1);
+            score++;
+            updateScore();
+            if(score % 10 === 0) gameSpeed += 0.5;
+        }
+    }
+
+    // Coins
+    for (let i = coins.length - 1; i >= 0; i--) {
+        let c = coins[i];
+        c.x -= gameSpeed;
+        c.frameTimer++;
+        if (c.frameTimer >= 10) {
+            c.frameTimer = 0;
+            c.frameIndex = (c.frameIndex + 1) % 4;
+        }
+
+        if (player.x < c.x + c.width && player.x + player.width > c.x &&
+            player.y < c.y + c.height && player.y + player.height > c.y) {
+            coins.splice(i, 1);
+            coinsCollected++;
+            score += 5;
+            updateScore();
+        }
+        
+        if (c.x + c.width < 0) coins.splice(i, 1);
+    }
+
+    // Powerups
+    for (let i = powerups.length - 1; i >= 0; i--) {
+        let p = powerups[i];
+        p.x -= gameSpeed;
+
+        if (player.x < p.x + p.width && player.x + player.width > p.x &&
+            player.y < p.y + p.height && player.y + player.height > p.y) {
+            powerups.splice(i, 1);
+            score += 20;
+            updateScore();
+        }
+
+        if (p.x + p.width < 0) powerups.splice(i, 1);
+    }
+
+    frameCount++;
+    if (frameCount % obstacleFreq === 0) spawnObstacle();
+    if (frameCount % coinFreq === 0) spawnCoin();
+    if (frameCount % powerupFreq === 0) spawnPowerup();
+}
+
+function updateScore() {
+    scoreDisplay.innerText = `Score: ${score} | Coins: ${coinsCollected}`;
+}
+
+// --- Drawing ---
+function drawBackground() {
+    bgX -= gameSpeed * 0.3;
+    if (bgX <= -canvas.width) bgX = 0;
+    
+    ctx.drawImage(bgImg, bgX, 0, canvas.width, canvas.height);
+    ctx.drawImage(bgImg, bgX + canvas.width, 0, canvas.width, canvas.height);
+    
+    // Lane markers
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([20, 20]);
+    lanes.forEach(laneY => {
+        ctx.beginPath();
+        ctx.moveTo(0, laneY + 110);
+        ctx.lineTo(canvas.width, laneY + 110);
+        ctx.stroke();
+    });
+    ctx.setLineDash([]);
+}
+
+function drawPlayer() {
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.ellipse(player.x + player.width/2, player.y + player.height, player.width/2.5, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Animated sprite
+    const spriteWidth = 128;
+    const spriteHeight = 128;
+    
+    if (player.isJumping) {
+        // Use jump sprite (4 frames)
+        const jumpFrame = Math.min(Math.floor(player.frameIndex / 2), 3);
+        ctx.drawImage(
+            playerJumpImg,
+            jumpFrame * spriteWidth, 0, spriteWidth, spriteHeight,
+            player.x, player.y, player.width, player.height
+        );
+    } else {
+        // Use run sprite (8 frames)
+        ctx.drawImage(
+            playerRunImg,
+            player.frameIndex * spriteWidth, 0, spriteWidth, spriteHeight,
+            player.x, player.y, player.width, player.height
+        );
+    }
+}
+
+function drawObstacles() {
+    obstacles.forEach(o => {
+        if (o.type === 'rock') {
+            ctx.fillStyle = "#654321";
+            ctx.beginPath();
+            ctx.moveTo(o.x, o.y + o.height);
+            ctx.lineTo(o.x + o.width/2, o.y);
+            ctx.lineTo(o.x + o.width, o.y + o.height);
+            ctx.fill();
+            ctx.fillStyle = "#4a3015";
+            ctx.fillRect(o.x + 15, o.y + 30, o.width - 30, o.height - 30);
+        } else {
+            ctx.fillStyle = "#8B4513";
+            ctx.fillRect(o.x, o.y + 40, o.width, o.height - 40);
+            ctx.fillStyle = "#654321";
+            ctx.fillRect(o.x + 10, o.y + 50, o.width - 20, o.height - 50);
+        }
+    });
+}
+
+function drawCoins() {
+    coins.forEach(c => {
+        const spriteWidth = 64;
+        const spriteHeight = 64;
+        ctx.drawImage(
+            coinImg,
+            c.frameIndex * spriteWidth, 0, spriteWidth, spriteHeight,
+            c.x, c.y, c.width, c.height
+        );
+    });
+}
+
+function drawPowerups() {
+    powerups.forEach(p => {
+        ctx.fillStyle = "#00ffff";
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = "#00ffff";
+        ctx.beginPath();
+        ctx.arc(p.x + p.width/2, p.y + p.height/2, 35, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 28px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("⚡", p.x + p.width/2, p.y + p.height/2 + 10);
+        ctx.textAlign = "left";
+    });
+}
+
+function gameLoop() {
+    if (!gameRunning) return;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    drawBackground();
+    updatePlayer();
+    updateEntities();
+    
+    drawCoins();
+    drawPowerups();
+    drawObstacles();
+    drawPlayer();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function startGame() {
+    startScreen.style.display = 'none';
+    gameStarted = true;
+    restartGame();
+}
+
+function endGame() {
+    gameRunning = false;
+    gameOverText.style.display = 'block';
+    restartBtn.style.display = 'block';
+}
+
+function restartGame() {
+    obstacles.length = 0;
+    coins.length = 0;
+    powerups.length = 0;
+    score = 0;
+    coinsCollected = 0;
+    frameCount = 0;
+    gameSpeed = 12;
+    currentLane = 1;
+    player.targetY = lanes[currentLane];
+    player.y = lanes[currentLane];
+    player.dy = 0;
+    player.grounded = true;
+    player.isJumping = false;
+    player.frameIndex = 0;
+    gameRunning = true;
+    
+    updateScore();
+    gameOverText.style.display = 'none';
+    restartBtn.style.display = 'none';
+    
+    gameLoop();
+}
+
+// --- Initialize ---
+let imagesLoaded = 0;
+const totalImages = 4;
+
+[playerRunImg, playerJumpImg, coinImg, bgImg].forEach(img => {
+    img.onload = () => {
+        imagesLoaded++;
+        if (imagesLoaded === totalImages) {
+            console.log('All assets loaded!');
+        }
+    };
+    img.onerror = () =>
