@@ -13,6 +13,7 @@ __pycache__/
 dist/
 build/
 data/
+vendor/
 *.log
 .DS_Store
 .idea/

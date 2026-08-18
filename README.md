@@ -2,7 +2,7 @@
 
 A crypto trading firm in software. The [Tauric Research TradingAgents](https://github.com/TauricResearch/TradingAgents) graph — analysts, bull/bear researchers, trader, risk committee, portfolio manager — is wired to **Binance spot**.
 
-**TradingAgents is the only AI brain.** Binance adapters are the eyes and hands. A deterministic risk gate can block a ticket; it cannot invent a BUY.
+**Signals always come from [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents).** Setup clones that repo into `vendor/TradingAgents`. The Portfolio Manager seat is the only source of BUY/SELL/HOLD. Binance adapters are the eyes and hands. A deterministic risk gate can block a ticket; it cannot invent a BUY.
 
 If `tradingagents` is not installed or no LLM key is set, every cycle is **HOLD**. Nothing else will invent a trade.
 

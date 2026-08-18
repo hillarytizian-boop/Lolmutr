@@ -1,25 +1,70 @@
-"""TradingAgents firm on an OpenAI-compatible endpoint (NVIDIA GLM-5.2).
+"""Run the official TradingAgents desk seats against NVIDIA GLM-5.2.
 
-Used when the official `tradingagents` package cannot be installed (Termux
-Python 3.14) but an LLM key is present. This is the same desk — analysts,
-bull/bear debate, trader, risk, portfolio manager — not a one-shot BUY/SELL.
+Prompts are taken from TauricResearch/TradingAgents (GitHub). Signals come
+only from the Portfolio Manager seat. This is not a one-shot BUY/SELL model.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from datetime import datetime, timezone
+from typing import Callable
 
 from app.llm import complete, parse_llm_rating
 from brain.decision import TradeDecision
+from brain.ta_source import official_parse_rating, official_root
 from brain.tradingagents_brain import STAGES, _RATING_TO_ACTION
 
 logger = logging.getLogger("tradingagents")
 
-
-def _ask(role: str, brief: str, payload: str) -> str:
-    text = complete(brief, payload, timeout=90.0)
-    return (text or "").strip()
+# Official seat prompts — TauricResearch/TradingAgents agents/*.py
+_MARKET = (
+    "You are a trading assistant tasked with analyzing financial markets. "
+    "Write a detailed report of the trends you observe from the tape provided. "
+    "Do not invent prices that are not in the tape. Append a Markdown table."
+)
+_SENTIMENT = (
+    "You are the TradingAgents Sentiment Analyst. If sentiment data is marked "
+    "unavailable, say so. Do not fabricate Fear & Greed or headlines."
+)
+_NEWS = (
+    "You are the TradingAgents News Analyst. If the wire is empty, say the "
+    "wire is empty. Do not invent headlines."
+)
+_BULL = (
+    "You are a Bull Analyst advocating for investing in the asset. Build an "
+    "evidence-based case from the research only. Address bear concerns. "
+    "Do not invent data."
+)
+_BEAR = (
+    "You are a Bear Analyst arguing against investing in the asset. Build an "
+    "evidence-based cautious case from the research only. Do not invent data."
+)
+_RM = (
+    "As the Research Manager and debate facilitator, critically evaluate this "
+    "round of debate and deliver a clear investment plan. Rating scale: "
+    "Buy / Overweight / Hold / Underweight / Sell. Reserve Hold when evidence "
+    "is genuinely balanced."
+)
+_TRADER = (
+    "You are a trading agent analyzing market data to make investment decisions. "
+    "Provide a specific recommendation to buy, sell, or hold. Anchor reasoning "
+    "in the analysts' reports and the research plan. "
+    "End with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**."
+)
+_RISK = (
+    "As the Conservative Risk Analyst, protect assets and minimize volatility. "
+    "Critically examine the trader's decision. You may force Hold. "
+    "Do not invent numbers."
+)
+_PM = (
+    "As the Portfolio Manager, synthesize the risk analysts' debate and deliver "
+    "the final trading decision. Rating scale (exactly one): Buy, Overweight, "
+    "Hold, Underweight, Sell. Reply with JSON only: "
+    '{"rating":"Buy|Overweight|Hold|Underweight|Sell","confidence":0.0,'
+    '"thesis":"two sentences"}. Hold is correct when there is no edge. '
+    "Do not force a trade. Do not invent prices."
+)
 
 
 def run_firm(
@@ -33,133 +78,91 @@ def run_firm(
         if on_stage:
             on_stage(name, status)
 
+    src = official_root()
+    source_note = (
+        f"source={src}" if src else "source=https://github.com/TauricResearch/TradingAgents"
+    )
+    logger.info("%s TradingAgents seats start %s", cycle_id, source_note)
+
     for name in STAGES:
         stage(name, "PENDING")
 
     reports: dict[str, str] = {}
+    tape = f"Instrument {symbol} (crypto spot).\n{market_blob}"
 
-    stage("market", "RUNNING")
-    reports["market"] = _ask(
-        "market",
-        "You are the TradingAgents Market Analyst for crypto spot. "
-        "Use only the numbers given. Do not invent prices. 6-10 sentences.",
-        f"Instrument {symbol}. Tape:\n{market_blob}",
-    ) or "Market analyst returned no text."
-    stage("market", "COMPLETE")
+    def seat(name: str, system: str, user: str) -> str:
+        stage(name, "RUNNING")
+        text = complete(system, user, timeout=90.0) or ""
+        stage(name, "COMPLETE")
+        return text
 
-    stage("sentiment", "RUNNING")
-    reports["sentiment"] = _ask(
-        "sentiment",
-        "You are the TradingAgents Sentiment Analyst. If sentiment data is "
-        "marked unavailable, say so. Do not fabricate Fear & Greed or headlines.",
-        f"{symbol}\n{market_blob}\nMarket report:\n{reports['market']}",
-    ) or "Sentiment unavailable."
-    stage("sentiment", "COMPLETE")
-
-    stage("news", "RUNNING")
-    reports["news"] = _ask(
-        "news",
-        "You are the TradingAgents News Analyst. If the wire is empty, say the "
-        "wire is empty. Do not invent headlines.",
-        f"{symbol}\n{market_blob}\nSentiment:\n{reports['sentiment']}",
-    ) or "News wire empty."
-    stage("news", "COMPLETE")
+    reports["market"] = seat("market", _MARKET, tape)
+    reports["sentiment"] = seat(
+        "sentiment", _SENTIMENT, tape + "\nMarket report:\n" + reports["market"]
+    )
+    reports["news"] = seat("news", _NEWS, tape + "\nSentiment:\n" + reports["sentiment"])
     stage("fundamentals", "SKIPPED")
-
     book = (
-        f"MARKET:\n{reports['market']}\n\nSENTIMENT:\n{reports['sentiment']}\n\n"
-        f"NEWS:\n{reports['news']}"
+        f"Market research report: {reports['market']}\n"
+        f"Social media sentiment report: {reports['sentiment']}\n"
+        f"Latest world affairs news: {reports['news']}\n"
+        "Asset fundamentals report (may be unavailable for crypto): n/a"
     )
-
-    stage("bull", "RUNNING")
-    reports["bull"] = _ask(
-        "bull",
-        "You are the TradingAgents Bull Researcher. Argue the constructive case "
-        "from the analyst book only. Do not invent data.",
-        book,
-    ) or ""
-    stage("bull", "COMPLETE")
-
-    stage("bear", "RUNNING")
-    reports["bear"] = _ask(
-        "bear",
-        "You are the TradingAgents Bear Researcher. Argue the cautious case "
-        "from the analyst book only. Do not invent data.",
-        book + f"\n\nBULL:\n{reports['bull']}",
-    ) or ""
-    stage("bear", "COMPLETE")
-
-    stage("trader", "RUNNING")
-    reports["trader"] = _ask(
+    reports["bull"] = seat("bull", _BULL, book)
+    reports["bear"] = seat("bear", _BEAR, book + "\nLast bull argument:\n" + reports["bull"])
+    debate = f"Bull:\n{reports['bull']}\n\nBear:\n{reports['bear']}"
+    reports["plan"] = seat("trader", _RM, "**Debate History:**\n" + debate)
+    reports["trader"] = seat(
         "trader",
-        "You are the TradingAgents Trader. Propose Buy, Hold, or Sell with "
-        "entry/stop if you have numbers. JSON last line optional.",
-        book + f"\n\nBULL:\n{reports['bull']}\n\nBEAR:\n{reports['bear']}",
-    ) or ""
-    stage("trader", "COMPLETE")
-
-    stage("risk", "RUNNING")
-    reports["risk"] = _ask(
-        "risk",
-        "You are the TradingAgents Risk committee (conservative chair). "
-        "Haircut size if vol is high. You may force Hold.",
-        f"TRADER:\n{reports['trader']}\n\n{book}",
-    ) or ""
-    stage("risk", "COMPLETE")
-
-    stage("portfolio", "RUNNING")
-    pm_text = _ask(
-        "portfolio",
-        "You are the TradingAgents Portfolio Manager. Final 5-tier rating. "
-        "Reply with JSON only: "
-        '{"rating":"Buy|Overweight|Hold|Underweight|Sell","confidence":0.0,'
-        '"thesis":"two sentences"}. '
-        "Hold is correct when the edge is not clear. Do not force a trade.",
-        f"TRADER:\n{reports['trader']}\nRISK:\n{reports['risk']}\n{book}",
+        _TRADER,
+        f"Proposed Investment Plan: {reports['plan']}\n\n{book}",
     )
-    stage("portfolio", "COMPLETE")
-    reports["final"] = pm_text or ""
+    reports["risk"] = seat("risk", _RISK, f"Trader decision:\n{reports['trader']}\n{book}")
+    reports["final"] = seat(
+        "portfolio",
+        _PM,
+        f"Research plan: {reports['plan']}\nTrader: {reports['trader']}\n"
+        f"Risk: {reports['risk']}",
+    )
 
-    parsed = parse_llm_rating(pm_text or "")
-    if not parsed:
-        return TradeDecision.hold(
-            symbol,
-            "TradingAgents Portfolio Manager did not emit a parseable rating. Staying flat.",
-            cycle_id=cycle_id,
-            brain_online=True,
-            reports=reports,
-            stages={n: "COMPLETE" for n in STAGES},
-        )
+    parse = official_parse_rating()
+    rating = parse(reports["final"] or "")
+    if rating == "Hold":
+        parsed = parse_llm_rating(reports["final"] or "")
+        if parsed:
+            rating = parsed["rating"]
+            conf = parsed.get("confidence") or 0.0
+            thesis = parsed.get("thesis") or reports["final"]
+        else:
+            conf = 0.0
+            thesis = reports["final"] or "Portfolio Manager stayed flat."
+    else:
+        parsed = parse_llm_rating(reports["final"] or "")
+        conf = (parsed or {}).get("confidence") or 0.0
+        thesis = (parsed or {}).get("thesis") or reports["final"]
 
-    rating = parsed["rating"]
-    action = _RATING_TO_ACTION.get(rating.lower(), "HOLD")
-    conf = parsed.get("confidence")
-    if conf is None:
-        conf = 0.0
-    thesis = parsed.get("thesis") or reports["final"]
+    action = _RATING_TO_ACTION.get(str(rating).lower(), "HOLD")
     logger.info("%s Portfolio Manager decision: %s", cycle_id, rating)
     return TradeDecision(
         symbol=symbol,
         action=action,
-        confidence=float(conf),
+        confidence=float(conf or 0.0),
         entry=None,
         stop_loss=None,
         take_profit=[],
         position_size=0.0,
         risk_reward=None,
-        thesis=thesis[:4000],
+        thesis=(thesis or "")[:4000],
         bull_case=reports.get("bull", "")[:2000],
         bear_case=reports.get("bear", "")[:2000],
         risk_assessment=reports.get("risk", "")[:2000],
         portfolio_decision=reports.get("final", "")[:2000],
-        timestamp=__import__("datetime").datetime.now(
-            __import__("datetime").timezone.utc
-        ).isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         brain="TradingAgents",
         cycle_id=cycle_id,
-        rating=rating,
+        rating=str(rating),
         reports=reports,
-        stages={n: "COMPLETE" if n != "fundamentals" else "SKIPPED" for n in STAGES},
+        stages={n: "SKIPPED" if n == "fundamentals" else "COMPLETE" for n in STAGES},
         risk_source="none",
         brain_online=True,
     )

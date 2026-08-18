@@ -37,6 +37,9 @@ python -m pip install --prefer-binary "httpx>=0.27.0" "python-dotenv>=1.0.0" "ri
 
 python -c "import httpx, dotenv; print('core deps ok', httpx.__version__)"
 
+echo "Fetching official TradingAgents (signal source)..."
+bash "$ROOT/scripts/fetch-tradingagents.sh" || echo "clone failed — firm still runs from bundled official prompts"
+
 echo
 echo "Next: paste your LLM key and (optional) Binance keys."
 echo "Paper is the default. Live needs the phrase I_UNDERSTAND."
