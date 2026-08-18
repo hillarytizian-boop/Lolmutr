@@ -43,13 +43,36 @@ def _marks(broker: PaperBroker, market: CryptoMarketAdapter) -> dict[str, float]
 
 def run_cockpit(*, once: bool = False) -> None:
     setup_logging()
+    from app.config import reload_env
+
+    reload_env()
     settings = get_settings()
     if settings.trading_mode == "live" and not settings.live_unlocked:
         logger.error("LIVE is locked. Set BINANCE_LIVE_CONFIRM=I_UNDERSTAND or stay on paper.")
         sys.exit(2)
 
-    market = CryptoMarketAdapter()
+    from app.binance.probe import probe as _probe
+    from market.market_data import CryptoMarketAdapter as _CMA
+    from app.binance.feed import MarketFeed
+
+    pr = _probe(
+        settings.binance_api_key,
+        settings.binance_api_secret,
+        testnet=settings.trading_mode == "testnet",
+    )
+    run_cockpit._binance_probe = pr
+    host = pr.get("public_host") if pr.get("signed_ok") or pr.get("public_ok") else None
+    feed = MarketFeed(host=host)
+    if host and pr.get("signed_ok"):
+        feed._backend = "binance"
+    market = _CMA(feed=feed)
     broker = PaperBroker()
+    nvidia_set = bool((settings.llm_provider == "nvidia") or __import__("os").getenv("NVIDIA_API_KEY"))
+    print(
+        f"NVIDIA: {'set' if nvidia_set else 'MISSING — run python -m app setup'}  "
+        f"Binance keys: {'OK' if pr.get('signed_ok') else pr.get('signed_detail')}  "
+        f"market: {host or 'DEMO'}"
+    )
     brain = TradingAgentsBrain()
     ui = CockpitUI()
     state = load_state()
@@ -109,6 +132,15 @@ def run_cockpit(*, once: bool = False) -> None:
 
         ctx = market.context(list(settings.watchlist), settings.interval)
         snap_acct = broker.snapshot(_marks(broker, market))
+        pr = getattr(run_cockpit, "_binance_probe", {}) or {}
+        if settings.live_unlocked and pr.get("signed_ok") and pr.get("usdt_free") is not None:
+            usdt = float(pr["usdt_free"])
+            snap_acct = {
+                **snap_acct,
+                "cash": usdt,
+                "equity": usdt,
+                "mode": "live",
+            }
         if state.start_equity is None:
             state.start_equity = float(snap_acct["equity"])
         day_pnl = 0.0

@@ -112,11 +112,27 @@ def probe(api_key: str = "", api_secret: str = "", *, testnet: bool = False) -> 
         "signed_detail": "keys not checked",
     }
     if api_key and api_secret:
-        base = host or (TESTNET if testnet else HOSTS[0])
-        ok, detail, _ = signed_account(base, api_key, api_secret)
-        result["signed_ok"] = ok
-        result["signed_detail"] = detail
-        if ok and not host:
-            result["public_host"] = base
-            result["public_ok"] = True
+        bases = []
+        if host:
+            bases.append(host)
+        bases.extend([TESTNET] if testnet else list(HOSTS))
+        last_detail = "unsigned"
+        for base in bases:
+            ok, detail, data = signed_account(base, api_key, api_secret)
+            last_detail = detail
+            if ok:
+                result["signed_ok"] = True
+                result["signed_detail"] = detail
+                result["public_host"] = base
+                result["public_ok"] = True
+                usdt = 0.0
+                for bal in data.get("balances") or []:
+                    if bal.get("asset") == "USDT":
+                        usdt = float(bal.get("free") or 0)
+                        break
+                result["usdt_free"] = usdt
+                break
+        else:
+            result["signed_ok"] = False
+            result["signed_detail"] = last_detail
     return result

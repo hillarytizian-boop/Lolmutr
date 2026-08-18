@@ -147,12 +147,12 @@ class DemoPublic:
 class MarketFeed:
     """Prefer live Binance; cache the choice so we don't TLS-fail every call."""
 
-    def __init__(self) -> None:
+    def __init__(self, host: str | None = None) -> None:
         picked, _ = pick_public_host()
-        host = picked or get_settings().public_rest
-        self._live = BinancePublic(base=host)
+        chosen = host or picked or get_settings().public_rest
+        self._live = BinancePublic(base=chosen)
         self._demo = DemoPublic()
-        self._backend: str | None = None
+        self._backend: str | None = "binance" if host else None
         self.last_error = ""
 
     @property

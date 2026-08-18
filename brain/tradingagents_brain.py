@@ -48,17 +48,9 @@ def tradingagents_installed() -> bool:
 
 
 def llm_key_present() -> bool:
-    names = (
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY",
-        "OPENROUTER_API_KEY",
-        "DEEPSEEK_API_KEY",
-        "XAI_API_KEY",
-        "GROQ_API_KEY",
-        "NVIDIA_API_KEY",
-    )
-    return any(os.getenv(n) for n in names)
+    from app.llm import llm_key_present as _present
+
+    return _present()
 
 
 def brain_status() -> dict[str, Any]:

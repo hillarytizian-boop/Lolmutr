@@ -61,6 +61,10 @@ _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 def detect_provider() -> str | None:
     explicit = (os.getenv("LLM_PROVIDER") or "").strip().lower()
+    if (os.getenv("NVIDIA_API_KEY") or os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVAPI_KEY")) and (
+        not explicit or explicit in {"nvidia", "openai_compatible"}
+    ):
+        return "nvidia"
     if explicit in PROVIDERS and os.getenv(PROVIDERS[explicit]["env"]):
         return explicit
     for name, spec in PROVIDERS.items():
@@ -69,8 +73,20 @@ def detect_provider() -> str | None:
     return None
 
 
-def llm_configured() -> bool:
-    return detect_provider() is not None
+def llm_key_present() -> bool:
+    names = (
+        "NVIDIA_API_KEY",
+        "NVIDIA_NIM_API_KEY",
+        "NVAPI_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "XAI_API_KEY",
+        "GROQ_API_KEY",
+    )
+    return any((os.getenv(n) or "").strip() for n in names)
 
 
 def resolve_endpoint() -> tuple[str, str, str] | None:
@@ -79,7 +95,13 @@ def resolve_endpoint() -> tuple[str, str, str] | None:
     if not name:
         return None
     spec = PROVIDERS[name]
-    key = (os.getenv(spec["env"]) or "").strip()
+    key = (
+        os.getenv(spec["env"])
+        or os.getenv("NVIDIA_API_KEY")
+        or os.getenv("NVIDIA_NIM_API_KEY")
+        or os.getenv("NVAPI_KEY")
+        or ""
+    ).strip()
     if not key:
         return None
     base = (os.getenv("LLM_BASE_URL") or spec["base"]).rstrip("/")
