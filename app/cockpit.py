@@ -252,14 +252,8 @@ def run_cockpit(*, once: bool = False) -> None:
 
         if once:
             print(ui._plain(view))
-        elif ui.console and ui.rich:
-            from rich.live import Live
-
-            if ui.live is None:
-                ui.live = Live(ui.render(view), console=ui.console, refresh_per_second=2, screen=False)
-                ui.live.start()
-            else:
-                ui.live.update(ui.render(view))
+        else:
+            ui.draw(view)
 
         if once:
             break

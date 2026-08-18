@@ -17,6 +17,16 @@ def test_nvidia_glm_is_default_provider():
     assert PROVIDERS["nvidia"]["model"] == "z-ai/glm-5.2"
 
 
+def test_nvidia_key_marks_brain_online(monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    monkeypatch.setenv("LLM_PROVIDER", "nvidia")
+    from brain.tradingagents_brain import brain_status
+
+    status = brain_status()
+    assert status["state"] == "ONLINE"
+    assert status["llm_key_present"] is True
+
+
 def test_offline_brain_is_hold_never_buy():
     brain = TradingAgentsBrain()
     decision = brain.analyze("BTCUSDT", cycle_id="test-offline")

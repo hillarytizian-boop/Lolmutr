@@ -62,23 +62,24 @@ def llm_key_present() -> bool:
 
 
 def brain_status() -> dict[str, Any]:
+    from app.llm import detect_provider
+
     installed = tradingagents_installed()
     keyed = llm_key_present()
+    provider = detect_provider()
     if installed and keyed:
-        state = "ONLINE"
-        detail = "TradingAgentsGraph ready"
-    elif not installed:
-        state = "OFFLINE"
-        detail = "package not installed (pip install tradingagents)"
+        state, detail = "ONLINE", f"TradingAgentsGraph ({provider or 'llm'})"
+    elif keyed:
+        state, detail = "ONLINE", f"firm via {provider or 'llm'} / GLM-5.2"
     else:
-        state = "OFFLINE"
-        detail = "no LLM API key in environment"
+        state, detail = "OFFLINE", "no NVIDIA_API_KEY — run: python -m app setup"
     return {
         "installed": installed,
         "llm_key_present": keyed,
         "state": state,
         "detail": detail,
         "brain": "TradingAgents",
+        "provider": provider,
     }
 
 
