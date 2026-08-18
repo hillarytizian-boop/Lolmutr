@@ -25,6 +25,7 @@ from app.agents.analysts import (
 from app.agents.context import fetch_fear_greed, fetch_news
 from app.agents.llm_bridge import probe, run_tradingagents
 from app.agents.portfolio import portfolio_manager
+from app.llm import overlay_decision
 from app.agents.researchers import bear_researcher, bull_researcher, research_manager
 from app.agents.risk import risk_committee, risk_multiplier
 from app.agents.trader import trader_agent
@@ -103,6 +104,11 @@ class TradingDesk:
                 "Underweight": "Sell",
                 "Sell": "Sell",
             }.get(decision.rating, decision.action)
+        elif engine == "binance-native":
+            decision = overlay_decision(
+                decision, [*analysts, bull, bear, plan, trader, *risk],
+                pair, ind.last_close, vol_mult,
+            )
 
         order = None
         if execute:
@@ -111,7 +117,7 @@ class TradingDesk:
                 decision.rating,
                 decision.size_pct,
                 ind.last_close,
-                reason=f"{decision.rating} via {engine}",
+                reason=f"{decision.rating} via {decision.engine}",
                 broker=self.broker,
             )
 

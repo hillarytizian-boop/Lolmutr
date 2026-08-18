@@ -21,7 +21,7 @@ dev = ["pytest>=8.0"]
 tradingagents = ["tradingagents @ git+https://github.com/TauricResearch/TradingAgents.git"]
 
 [project.scripts]
-lolmutr = "app.main:run"
+lolmutr = "app.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

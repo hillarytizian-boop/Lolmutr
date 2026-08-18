@@ -72,6 +72,9 @@ def execute_decision(
                     break
             notional = usdt * max(0.0, size_pct)
             qty = notional / mark if mark else 0.0
+            from app.binance.client import quantize_qty
+
+            qty = quantize_qty(pair, qty, price=mark)
             if qty <= 0:
                 return None
             raw = signed.market_order(pair, "BUY", qty)

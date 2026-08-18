@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import math
 import time
 from typing import Any
 from urllib.parse import urlencode
@@ -137,8 +138,9 @@ class BinanceSigned:
         side_u = side.upper()
         if side_u not in {"BUY", "SELL"}:
             raise BinanceError("side must be BUY or SELL")
-        if quantity <= 0:
-            raise BinanceError("quantity must be positive")
+        qty = quantize_qty(pair, quantity)
+        if qty <= 0:
+            raise BinanceError("quantity below Binance LOT_SIZE / MIN_NOTIONAL")
         return self._signed(
             "POST",
             "/api/v3/order",
@@ -146,10 +148,59 @@ class BinanceSigned:
                 "symbol": pair,
                 "side": side_u,
                 "type": "MARKET",
-                "quantity": f"{quantity:.8f}".rstrip("0").rstrip("."),
+                "quantity": f"{qty:.8f}".rstrip("0").rstrip("."),
                 "newOrderRespType": "FULL",
             },
         )
+
+
+_FILTERS: dict[str, tuple[float, float, float]] = {}
+
+
+def symbol_filters(symbol: str, base: str | None = None) -> tuple[float, float, float]:
+    """Return (step_size, min_qty, min_notional) for a spot pair."""
+    pair = to_binance(symbol)
+    if pair in _FILTERS:
+        return _FILTERS[pair]
+    step, min_qty, min_notional = 1e-5, 0.0, 10.0
+    try:
+        host = (base or get_settings().public_rest).rstrip("/")
+        data = _get(host, "/api/v3/exchangeInfo", {"symbol": pair})
+        for info in data.get("symbols") or []:
+            if info.get("symbol") != pair:
+                continue
+            for filt in info.get("filters") or []:
+                kind = filt.get("filterType")
+                if kind == "LOT_SIZE":
+                    step = float(filt.get("stepSize") or step)
+                    min_qty = float(filt.get("minQty") or 0)
+                elif kind in {"NOTIONAL", "MIN_NOTIONAL"}:
+                    min_notional = float(
+                        filt.get("minNotional") or filt.get("notional") or min_notional
+                    )
+    except BinanceError:
+        pass
+    _FILTERS[pair] = (step, min_qty, min_notional)
+    return _FILTERS[pair]
+
+
+def quantize_qty(symbol: str, quantity: float, price: float = 0.0) -> float:
+    """Floor quantity to LOT_SIZE. Returns 0 if below min qty / notional."""
+    if quantity <= 0:
+        return 0.0
+    step, min_qty, min_notional = symbol_filters(symbol)
+    if step <= 0:
+        stepped = quantity
+    else:
+        stepped = math.floor(quantity / step) * step
+    # Trim binary dust so Binance accepts the string.
+    text = f"{stepped:.8f}".rstrip("0").rstrip(".")
+    stepped = float(text) if text else 0.0
+    if stepped < min_qty:
+        return 0.0
+    if price > 0 and stepped * price < min_notional:
+        return 0.0
+    return stepped
 
 
 def _shape_ticker(row: dict[str, Any]) -> dict[str, Any]:

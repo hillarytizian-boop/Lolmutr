@@ -23,6 +23,7 @@ _LLM_ENV = (
     "OPENROUTER_API_KEY",
     "DEEPSEEK_API_KEY",
     "XAI_API_KEY",
+    "GROQ_API_KEY",
 )
 
 

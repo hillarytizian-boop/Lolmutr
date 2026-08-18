@@ -1,45 +1,78 @@
 # Lolmutr — Binance desk on TradingAgents
 
-A crypto trading firm in software. The [Tauric Research TradingAgents](https://github.com/TauricResearch/TradingAgents) graph — analysts, bull/bear researchers, trader, risk committee, portfolio manager — is wired to **Binance spot** instead of Yahoo-finance equities.
+A crypto trading firm in software. The [Tauric Research TradingAgents](https://github.com/TauricResearch/TradingAgents) graph — analysts, bull/bear researchers, trader, risk committee, portfolio manager — is wired to **Binance spot**.
 
-Default venue is a **paper book** marked to live Binance last prices. Testnet is optional. Live trading stays locked unless you set an explicit confirm phrase.
+On a phone it is a Termux loop: clone, paste an LLM key and Binance keys, and the desk starts scanning the watchlist on a timer.
 
-> Not financial advice. The original TradingAgents authors designed the framework for research; this desk is the same kind of experiment.
+> Not financial advice. Paper is the default. Live trading stays locked until you type `I_UNDERSTAND`. Agents can be wrong.
 
-## What it does
-
-1. Pulls live USDT-perp-quality spot data from Binance public REST (`ticker`, `klines`, `depth`).
-2. Runs the TradingAgents firm locally:
-   - **Market Analyst** — RSI, MACD, EMA stack, Bollinger, ATR, volume
-   - **Sentiment Analyst** — Crypto Fear & Greed (contrarian) + headline tone
-   - **News Analyst** — public crypto wire
-   - **Market Structure** — book imbalance / range (crypto stand-in for equity fundamentals; TradingAgents also drops fundamentals in crypto mode)
-   - **Bull / Bear researchers** debate, **Research Manager** writes a 5-tier plan
-   - **Trader** issues Buy / Hold / Sell
-   - **Risk committee** haircuts size by realized vol
-   - **Portfolio Manager** publishes Buy / Overweight / Hold / Underweight / Sell
-3. Optionally paper-fills the ticket at Binance last (10 bps fee).
-4. If you `pip install .[tradingagents]` and export an LLM key, the official `TradingAgentsGraph.propagate(ticker, date, asset_type="crypto")` run is folded in. `BTCUSDT` is mapped to `BTC-USD` for that graph.
-
-## Quick start
+## Termux — clone, keys, auto-trade
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python -m app
+pkg update -y
+pkg install -y git python
+# optional: keep the CPU awake while the loop runs
+pkg install -y termux-api
+
+git clone -b arena/01a01418-lolmutr https://github.com/hillarytizian-boop/Lolmutr.git
+cd Lolmutr
+bash scripts/termux-setup.sh
 ```
 
-Open the printed URL. Pick a pair, hit **Run desk**.
+The script installs a venv, then asks:
 
-If the host cannot complete TLS to `api.binance.com` (some sandboxes), the desk
-falls back to a deterministic demo tape so the firm, chart, and paper book stay
-interactive. Local machines that can reach Binance never see that fallback.
+1. **LLM provider** — `groq` (free tier, good on a phone), `openai`, `openrouter`, `deepseek`, `gemini`, or `none`
+2. **API key** — pasted hidden
+3. **Trading mode** — `paper` (default) / `testnet` / `live`
+4. **Binance API key + secret** — required for testnet or live
+5. **Live unlock** — type `I_UNDERSTAND` or it forces paper
+6. **Watchlist + loop minutes**
+
+Then it starts `python -m app trade`.
+
+```
+[cycle 1] BTCUSDT  Buy   conf=0.71  FILL 0.007 @ 108450 on paper
+          ETHUSDT  Hold  skip (hold)
+sleeping 900s     Ctrl+C or  touch data/HALT  to stop
+```
+
+Later sessions:
 
 ```bash
-# just the tests
-pip install pytest
+cd ~/Lolmutr
+. .venv/bin/activate
+python -m app trade          # autotrader
+python -m app once           # one cycle
+python -m app serve          # web desk
+```
+
+Binance key permissions: **spot read + spot trade only**. Do not enable withdrawals.
+
+## What the loop does
+
+Every `LOOP_SECONDS` (default 15 minutes) it runs the firm on each watchlist pair and, if gates pass, sends the ticket:
+
+| Gate | Default |
+|---|---|
+| Minimum PM confidence | 0.58 |
+| Max open names | 3 |
+| Daily loss circuit breaker | −5% of start-of-day equity |
+| Cooldown per symbol | 45 minutes |
+| No pyramiding | skip Buy if already long |
+| Live lock | `BINANCE_LIVE_CONFIRM=I_UNDERSTAND` |
+
+The LLM (when a key is set) re-rates the finished analyst book as Portfolio Manager. If the model is down, the native heuristic rating is used. If `tradingagents` is installed, the official crypto graph can overlay as well.
+
+## Desktop / web
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python -m app serve
+```
+
+```bash
 python -m pytest -q
 ```
 
@@ -48,24 +81,14 @@ python -m pytest -q
 | Variable | Default | Meaning |
 |---|---|---|
 | `TRADING_MODE` | `paper` | `paper` / `testnet` / `live` |
-| `PAPER_STARTING_CASH` | `10000` | USDT in the paper book |
-| `BINANCE_API_KEY` / `BINANCE_API_SECRET` | empty | needed only for testnet or live |
-| `BINANCE_LIVE_CONFIRM` | empty | must be `I_UNDERSTAND` before any live order is signed |
-| `OPENAI_API_KEY` (or Anthropic / Gemini / …) | empty | unlocks the official TradingAgents graph |
-
-Live mode is refused even if keys are present, unless the confirm phrase is set. The dashboard never asks for secrets.
-
-## Architecture
-
-```
-web/                 dashboard (Sora + IBM Plex Mono, Binance gold)
-app/main.py          FastAPI — /api/analyze, markets, portfolio
-app/agents/graph.py  firm orchestrator (TradingAgents shape)
-app/binance/         public REST, indicators, paper broker, signed exec
-```
-
-Symbol bridge: `BTCUSDT` ↔ `BTC-USD` lives in `app/binance/symbols.py`, matching TradingAgents’ crypto ticker convention.
+| `WATCHLIST` | `BTCUSDT,ETHUSDT,SOLUSDT` | pairs the loop scans |
+| `LOOP_SECONDS` | `900` | sleep between cycles |
+| `MIN_CONFIDENCE` | `0.58` | skip weaker tickets |
+| `MAX_DAILY_LOSS_PCT` | `5` | halt new tickets for the UTC day |
+| `AUTO_EXECUTE` | `true` | `false` = analyze only |
+| `BINANCE_LIVE_CONFIRM` | empty | must be `I_UNDERSTAND` for live |
+| `LLM_PROVIDER` | empty | `groq` / `openai` / `openrouter` / … |
 
 ## Disclaimer
 
-This is research software. Agents can be wrong, LLM output is non-deterministic, and crypto is volatile. Use paper mode. Do not size real money off an unattended loop.
+Research software. LLM output is non-deterministic, crypto is volatile, and an unattended live loop can lose money. Start on paper. Size live accounts as if the agent will be wrong.

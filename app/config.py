@@ -9,7 +9,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
 
 VALID_MODES = ("paper", "testnet", "live")
 BINANCE_SPOT = "https://api.binance.com"
@@ -29,13 +28,52 @@ DEFAULT_WATCHLIST = (
     "SUIUSDT",
 )
 
+AUTO_WATCHLIST = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+
 DATA_DIR = Path(os.getenv("LOLMUTR_DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+HALT_FILE = DATA_DIR / "HALT"
+
+
+def load_env(*, override: bool = False) -> None:
+    load_dotenv(ROOT / ".env", override=override)
+
+
+def reload_env() -> None:
+    load_env(override=True)
+
+
+load_env()
 
 
 def _mode() -> str:
     raw = (os.getenv("TRADING_MODE") or "paper").strip().lower()
     return raw if raw in VALID_MODES else "paper"
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
+def _watchlist() -> tuple[str, ...]:
+    raw = (os.getenv("WATCHLIST") or "").strip()
+    if not raw:
+        return AUTO_WATCHLIST
+    from app.binance.symbols import to_binance
+
+    out: list[str] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(to_binance(part))
+        except ValueError:
+            continue
+    return tuple(out) or AUTO_WATCHLIST
 
 
 @dataclass(frozen=True)
@@ -47,6 +85,17 @@ class Settings:
     live_confirm: str
     host: str
     port: int
+    watchlist: tuple[str, ...]
+    interval: str
+    loop_seconds: int
+    min_confidence: float
+    max_positions: int
+    max_daily_loss_pct: float
+    cooldown_minutes: int
+    auto_execute: bool
+    llm_provider: str
+    llm_model: str
+    llm_base_url: str
 
     @property
     def binance_rest(self) -> str:
@@ -56,8 +105,6 @@ class Settings:
 
     @property
     def public_rest(self) -> str:
-        # Market data always comes from production so the desk stays live
-        # even when paper-trading or using an empty testnet book.
         return BINANCE_SPOT
 
     @property
@@ -88,4 +135,15 @@ def get_settings() -> Settings:
         live_confirm=(os.getenv("BINANCE_LIVE_CONFIRM") or "").strip(),
         host=os.getenv("HOST") or "0.0.0.0",
         port=int(os.getenv("PORT") or 8000),
+        watchlist=_watchlist(),
+        interval=(os.getenv("INTERVAL") or "1h").strip(),
+        loop_seconds=int(os.getenv("LOOP_SECONDS") or 900),
+        min_confidence=float(os.getenv("MIN_CONFIDENCE") or 0.58),
+        max_positions=int(os.getenv("MAX_POSITIONS") or 3),
+        max_daily_loss_pct=float(os.getenv("MAX_DAILY_LOSS_PCT") or 5.0),
+        cooldown_minutes=int(os.getenv("COOLDOWN_MINUTES") or 45),
+        auto_execute=_bool("AUTO_EXECUTE", True),
+        llm_provider=(os.getenv("LLM_PROVIDER") or "").strip().lower(),
+        llm_model=(os.getenv("LLM_MODEL") or "").strip(),
+        llm_base_url=(os.getenv("LLM_BASE_URL") or "").strip(),
     )
