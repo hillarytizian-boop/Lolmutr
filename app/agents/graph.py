@@ -106,10 +106,30 @@ class TradingDesk:
                 "Sell": "Sell",
             }.get(decision.rating, decision.action)
         elif engine == "binance-native":
+            from app.config import get_settings
+
+            settings = get_settings()
+            memory = ctx.get("memory") or []
             decision = overlay_decision(
-                decision, [*analysts, bull, bear, plan, trader, *risk],
-                pair, ind.last_close, vol_mult,
+                decision,
+                [*analysts, bull, bear, plan, trader, *risk],
+                pair,
+                ind.last_close,
+                vol_mult,
+                memory=memory,
+                small_account=settings.small_account,
             )
+            decision.size_pct = profit_size_pct(
+                decision.rating,
+                decision.confidence,
+                vol_mult,
+                small_account=settings.small_account,
+            )
+            if decision.engine == "binance-native":
+                decision.engine = "trading-agent"
+            if settings.small_account and decision.action == "Buy" and decision.entry:
+                # Don't clip a $10 runner at 2.4 ATR — trail toward the goal.
+                decision.take_profit = None
 
         order = None
         if execute:

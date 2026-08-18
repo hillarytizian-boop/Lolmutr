@@ -47,3 +47,19 @@ def test_high_conviction_buy_is_larger():
     assert hot > meek > 0
     assert hold == 0
     assert hot <= 0.20
+
+
+def test_ten_dollar_book_commits_almost_all_cash():
+    size = profit_size_pct("Buy", 0.7, 1.0, small_account=True)
+    assert size >= 0.9
+    assert profit_size_pct("Buy", 0.4, 1.0, small_account=True) == 0
+
+
+def test_goal_and_floor():
+    from app.profit import goal_reached, too_small_to_trade
+
+    assert goal_reached(50, 50)
+    assert goal_reached(51.2, 50)
+    assert not goal_reached(49.9, 50)
+    assert too_small_to_trade(4.5, 5)
+    assert not too_small_to_trade(10, 5)

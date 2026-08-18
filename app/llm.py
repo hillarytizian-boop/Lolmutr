@@ -163,6 +163,7 @@ def overlay_decision(
     price: float,
     vol_mult: float,
     memory: list[str] | None = None,
+    small_account: bool = False,
 ) -> Decision:
     """TradingAgents PM overlay: maximize risk-adjusted profit. Fail-open."""
     if not llm_configured():
@@ -188,10 +189,9 @@ def overlay_decision(
     )
     text = complete(
         "You are the TradingAgents Portfolio Manager on a Binance spot desk. "
-        "Mandate: maximize risk-adjusted profit. Take winners, cut losers, "
-        "do not sit on a fading long. Prefer a clean Buy or Sell when the "
-        "book agrees; use Hold only when the edge is truly gone. "
-        "Never invent prices. Never ignore a stop.",
+        "Mandate: compound a small USDT stake toward a 5x goal. "
+        "Take clean Buys only when the book agrees; cut losers; let winners "
+        "run for the trail. Never invent prices. Never ignore a stop.",
         user,
     )
     parsed = parse_llm_rating(text or "")
@@ -203,7 +203,9 @@ def overlay_decision(
     decision.action = rating_to_action(decision.rating)
     if parsed.get("confidence") is not None:
         decision.confidence = parsed["confidence"]
-    decision.size_pct = profit_size_pct(decision.rating, decision.confidence, vol_mult)
+    decision.size_pct = profit_size_pct(
+        decision.rating, decision.confidence, vol_mult, small_account=small_account
+    )
     if parsed.get("thesis"):
         decision.thesis = parsed["thesis"]
         decision.executive_summary = parsed["thesis"][:240]

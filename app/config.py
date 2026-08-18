@@ -99,6 +99,13 @@ class Settings:
     manage_seconds: int
     trail_atr: float
     profit_mode: bool
+    stake_usd: float
+    goal_usd: float
+    min_notional: float
+
+    @property
+    def small_account(self) -> bool:
+        return self.stake_usd <= 50 or self.paper_starting_cash <= 50
 
     @property
     def binance_rest(self) -> str:
@@ -132,7 +139,7 @@ class Settings:
 def get_settings() -> Settings:
     return Settings(
         trading_mode=_mode(),
-        paper_starting_cash=float(os.getenv("PAPER_STARTING_CASH") or 10_000),
+        paper_starting_cash=float(os.getenv("PAPER_STARTING_CASH") or os.getenv("STAKE_USD") or 10),
         binance_api_key=(os.getenv("BINANCE_API_KEY") or "").strip(),
         binance_api_secret=(os.getenv("BINANCE_API_SECRET") or "").strip(),
         live_confirm=(os.getenv("BINANCE_LIVE_CONFIRM") or "").strip(),
@@ -142,14 +149,17 @@ def get_settings() -> Settings:
         interval=(os.getenv("INTERVAL") or "1h").strip(),
         loop_seconds=int(os.getenv("LOOP_SECONDS") or 900),
         min_confidence=float(os.getenv("MIN_CONFIDENCE") or 0.58),
-        max_positions=int(os.getenv("MAX_POSITIONS") or 3),
-        max_daily_loss_pct=float(os.getenv("MAX_DAILY_LOSS_PCT") or 5.0),
-        cooldown_minutes=int(os.getenv("COOLDOWN_MINUTES") or 45),
+        max_positions=int(os.getenv("MAX_POSITIONS") or 1),
+        max_daily_loss_pct=float(os.getenv("MAX_DAILY_LOSS_PCT") or 15.0),
+        cooldown_minutes=int(os.getenv("COOLDOWN_MINUTES") or 20),
         auto_execute=_bool("AUTO_EXECUTE", True),
         llm_provider=(os.getenv("LLM_PROVIDER") or "").strip().lower(),
         llm_model=(os.getenv("LLM_MODEL") or "").strip(),
         llm_base_url=(os.getenv("LLM_BASE_URL") or "").strip(),
         manage_seconds=int(os.getenv("MANAGE_SECONDS") or 60),
-        trail_atr=float(os.getenv("TRAIL_ATR") or 1.4),
+        trail_atr=float(os.getenv("TRAIL_ATR") or 1.8),
         profit_mode=_bool("PROFIT_MODE", True),
+        stake_usd=float(os.getenv("STAKE_USD") or os.getenv("PAPER_STARTING_CASH") or 10),
+        goal_usd=float(os.getenv("GOAL_USD") or 50),
+        min_notional=float(os.getenv("MIN_NOTIONAL") or 5),
     )

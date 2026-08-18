@@ -65,20 +65,35 @@ def profit_size_pct(
     vol_mult: float,
     base_buy: float = 0.12,
     base_over: float = 0.06,
+    small_account: bool = False,
 ) -> float:
-    """Conviction-weighted size. High-confidence Buy gets more of the book."""
+    """Conviction-weighted size. A $10 book must commit almost all cash."""
+    if rating not in {"Buy", "Overweight"}:
+        return 0.0
+    if small_account:
+        # Min notional on Binance is ~5 USDT. A $10 stake can only run one
+        # ticket, so we compound ~90% and leave a fee buffer.
+        if rating == "Buy":
+            return 0.92 if confidence >= 0.62 else 0.0
+        return 0.80 if confidence >= 0.62 else 0.0
     if rating == "Buy":
         raw = base_buy
         if confidence >= 0.75:
             raw *= 1.35
         elif confidence < 0.6:
             raw *= 0.75
-    elif rating == "Overweight":
-        raw = base_over
     else:
-        return 0.0
+        raw = base_over
     adj = max(0.35, min(1.25, vol_mult))
     return round(min(0.20, raw * adj), 4)
+
+
+def goal_reached(equity: float, goal_usd: float) -> bool:
+    return goal_usd > 0 and equity + 1e-9 >= goal_usd
+
+
+def too_small_to_trade(equity: float, min_notional: float) -> bool:
+    return equity < min_notional
 
 
 def new_bracket(

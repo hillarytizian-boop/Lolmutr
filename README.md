@@ -2,7 +2,7 @@
 
 A crypto trading firm in software. The [Tauric Research TradingAgents](https://github.com/TauricResearch/TradingAgents) graph — analysts, bull/bear researchers, trader, risk committee, portfolio manager — is wired to **Binance spot**.
 
-On a phone it is a Termux loop: clone, paste an LLM key and Binance keys, and the desk starts scanning the watchlist on a timer.
+Default book is a **$10 stake compounding toward a $50 goal**. One position at a time, ~90% of cash on a clean Buy, winners trail, book locks when $50 is hit. That is a target, not a forecast.
 
 > Not financial advice. Paper is the default. Live trading stays locked until you type `I_UNDERSTAND`. Agents can be wrong.
 
@@ -52,10 +52,10 @@ Binance key permissions: **spot read + spot trade only**. Do not enable withdraw
 
 The TradingAgents firm picks the trade. A profit layer then manages the open long so winners get banked instead of given back:
 
-- **Take-profit** at the PM target (~2.4 ATR)
-- **Hard stop** at 1.6 ATR
-- **Trailing stop** that ratchets up as price makes new highs
-- **Agent Sell** flattens immediately (cooldown does not block exits)
+- **$10 → $50 stake**: one ticket, ~92% of cash, compound after every fill
+- **No early take-profit** on a small book — the trail lets a winner run toward the goal
+- **Hard stop** at 1.6 ATR so one loser does not have to be zero
+- **Goal lock** at $50 — the loop stops and keeps the cash
 - Closed-trade PnL is fed back into the next PM vote
 
 Every `LOOP_SECONDS` (default 15 minutes) the firm votes. Every `MANAGE_SECONDS` (default 60s) stops and targets are checked. If the PM rating clears the gates, it fills:
@@ -63,9 +63,9 @@ Every `LOOP_SECONDS` (default 15 minutes) the firm votes. Every `MANAGE_SECONDS`
 | Gate | Default |
 |---|---|
 | Minimum PM confidence | 0.58 |
-| Max open names | 3 |
-| Daily loss circuit breaker | −5% of start-of-day equity |
-| Cooldown per symbol | 45 minutes |
+| Max open names | 1 ($10 book) |
+| Daily loss circuit breaker | −15% of start-of-day equity |
+| Cooldown per symbol | 20 minutes |
 | No pyramiding | skip Buy if already long |
 | Live lock | `BINANCE_LIVE_CONFIRM=I_UNDERSTAND` |
 
@@ -89,6 +89,8 @@ python -m pytest -q
 | Variable | Default | Meaning |
 |---|---|---|
 | `TRADING_MODE` | `paper` | `paper` / `testnet` / `live` |
+| `STAKE_USD` | `10` | starting book |
+| `GOAL_USD` | `50` | lock the book when equity hits this |
 | `WATCHLIST` | `BTCUSDT,ETHUSDT,SOLUSDT` | pairs the loop scans |
 | `LOOP_SECONDS` | `900` | sleep between cycles |
 | `MIN_CONFIDENCE` | `0.58` | skip weaker tickets |

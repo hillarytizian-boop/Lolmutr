@@ -45,7 +45,8 @@ def execute_decision(
         snap = broker.snapshot({pair: price})
         if action == "Buy":
             notional = max(0.0, float(snap["equity"]) * max(0.0, size_pct))
-            if notional < 10:
+            floor = max(1.0, float(settings.min_notional))
+            if notional + 1e-9 < floor:
                 return None
             return broker.market_order(
                 pair, "BUY", notional=notional, price=price, reason=reason

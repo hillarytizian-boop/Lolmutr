@@ -21,7 +21,14 @@ from app.binance.executor import ExecutionError, execute_decision
 from app.binance.feed import MarketFeed
 from app.binance.paper import PaperBroker
 from app.config import DATA_DIR, HALT_FILE, get_settings
-from app.profit import exit_reason, memory_line, new_bracket, update_bracket
+from app.profit import (
+    exit_reason,
+    goal_reached,
+    memory_line,
+    new_bracket,
+    too_small_to_trade,
+    update_bracket,
+)
 from app.store import RunStore
 
 logger = logging.getLogger("lolmutr.auto")
@@ -46,6 +53,7 @@ def load_state(path: Path) -> dict[str, Any]:
             "halted": False,
             "brackets": {},
             "memory": [],
+            "goal_hit": False,
         }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -57,6 +65,7 @@ def load_state(path: Path) -> dict[str, Any]:
     data.setdefault("halted", False)
     data.setdefault("brackets", {})
     data.setdefault("memory", [])
+    data.setdefault("goal_hit", False)
     return data
 
 
@@ -169,7 +178,7 @@ def run_autotrader(*, once: bool = False) -> None:
 
     logger.info(
         "trading-agent start mode=%s execute=%s llm=%s watchlist=%s "
-        "analyze=%ss manage=%ss trail=%.2f ATR",
+        "analyze=%ss manage=%ss trail=%.2f ATR  stake=%.2f goal=%.2f",
         settings.trading_mode,
         settings.auto_execute,
         settings.llm_provider or "native-firm",
@@ -177,6 +186,8 @@ def run_autotrader(*, once: bool = False) -> None:
         settings.loop_seconds,
         settings.manage_seconds,
         settings.trail_atr,
+        settings.stake_usd,
+        settings.goal_usd,
     )
     logger.info("stop: Ctrl+C or  touch %s", HALT_FILE)
 
@@ -240,6 +251,16 @@ def _flatten(
         price,
         memory_line(rec),
     )
+    snap = broker.snapshot({symbol: price})
+    if goal_reached(float(snap["equity"]), settings.goal_usd):
+        state["halted"] = True
+        state["goal_hit"] = True
+        logger.info(
+            "GOAL HIT equity=%.2f >= %.2f after %s — locking the book.",
+            snap["equity"],
+            settings.goal_usd,
+            reason,
+        )
     return order
 
 
@@ -285,10 +306,11 @@ def _manage_open(
         if not bracket:
             entry = float(pos["avg_price"])
             atr = atrs.get(symbol) or entry * 0.01
+            take = None if settings.small_account else entry + 2.4 * atr
             bracket = new_bracket(
                 entry,
                 entry - 1.6 * atr,
-                entry + 2.4 * atr,
+                take,
                 atr,
                 settings.trail_atr,
             )
@@ -343,7 +365,8 @@ def _cycle(
     if state.get("day") != today:
         state["day"] = today
         state["start_equity"] = None
-        state["halted"] = False
+        if not state.get("goal_hit"):
+            state["halted"] = False
 
     marks: dict[str, float] = {}
     snap = broker.snapshot()
@@ -364,10 +387,28 @@ def _cycle(
         save_state(state_path, state)
         logger.error("circuit breaker: daily %+.2f%% — no more tickets today", dd)
 
+    if goal_reached(float(snap["equity"]), settings.goal_usd):
+        state["halted"] = True
+        save_state(state_path, state)
+        logger.info(
+            "GOAL HIT equity=%.2f >= %.2f — locking the book. No more tickets.",
+            snap["equity"],
+            settings.goal_usd,
+        )
+        return
+    if too_small_to_trade(float(snap["equity"]), settings.min_notional):
+        logger.warning(
+            "equity=%.2f below min notional %.2f — cannot place a Binance ticket",
+            snap["equity"],
+            settings.min_notional,
+        )
+
     logger.info(
-        "cycle %s equity=%.2f day_pnl=%+.2f%% feed=%s positions=%s",
+        "cycle %s equity=%.2f  %s→%.0f  day_pnl=%+.2f%% feed=%s positions=%s",
         cycle,
         snap["equity"],
+        settings.stake_usd,
+        settings.goal_usd,
         dd,
         getattr(public, "source", "?"),
         len(snap["positions"]),
