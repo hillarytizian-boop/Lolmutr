@@ -23,8 +23,15 @@ Stop the loop with Ctrl+C or:  touch data/HALT
 
 def main(argv: list[str] | None = None) -> None:
     args = list(sys.argv[1:] if argv is None else argv)
-    cmd = (args[0] if args else "serve").lower()
+    cmd = args[0].lower() if args else ""
     rest = args[1:]
+    if not cmd:
+        try:
+            import fastapi  # noqa: F401
+
+            cmd = "serve"
+        except ImportError:
+            cmd = "trade"
 
     if cmd in {"-h", "--help", "help"}:
         print(HELP)
@@ -35,14 +42,14 @@ def main(argv: list[str] | None = None) -> None:
         run_setup(start="--start" in rest or "-y" in rest)
         return
     if cmd in {"trade", "auto", "trader"}:
-        from app.autotrader import run_autotrader
+        from app.cockpit import run_cockpit
 
-        run_autotrader(once=False)
+        run_cockpit(once=False)
         return
     if cmd in {"once"}:
-        from app.autotrader import run_autotrader
+        from app.cockpit import run_cockpit
 
-        run_autotrader(once=True)
+        run_cockpit(once=True)
         return
     if cmd in {"serve", "web", "desk"}:
         try:

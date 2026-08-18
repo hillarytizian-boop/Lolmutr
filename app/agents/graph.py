@@ -23,10 +23,8 @@ from app.agents.analysts import (
     structure_analyst,
 )
 from app.agents.context import fetch_fear_greed, fetch_news
-from app.agents.llm_bridge import probe, run_tradingagents
+from app.agents.llm_bridge import probe
 from app.agents.portfolio import portfolio_manager
-from app.llm import overlay_decision
-from app.profit import profit_size_pct
 from app.agents.researchers import bear_researcher, bull_researcher, research_manager
 from app.agents.risk import risk_committee, risk_multiplier
 from app.agents.trader import trader_agent
@@ -82,54 +80,36 @@ class TradingDesk:
         risk = risk_committee(trader, ind)
         vol_mult = risk_multiplier(ind)
 
-        engine = "binance-native"
-        ta_result = run_tradingagents(pair)
-        if ta_result and ta_result.get("rating"):
-            engine = "tradingagents+binance"
-            # Official graph wins the rating; we keep Binance levels / sizing.
-            plan.stance = str(ta_result["rating"])
-            plan.details = (
-                f"{plan.details}\n\nTradingAgents overlay ({to_yahoo(pair)}): "
-                f"{ta_result.get('final_trade_decision') or ta_result['rating']}"
-            )
+        # Official TradingAgents is the only AI that may emit Buy/Sell.
+        from brain.tradingagents_brain import TradingAgentsBrain
 
-        decision: Decision = portfolio_manager(
-            plan, trader, risk, ind, engine=engine, vol_mult=vol_mult
+        ta_brain = TradingAgentsBrain()
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        ta_decision = ta_brain.analyze(
+            pair,
+            cycle_id=f"{stamp}-{pair}",
+            market_note="Market adapter collected Binance OHLCV for execution/risk only.",
         )
-        if ta_result and ta_result.get("rating"):
-            decision.rating = str(ta_result["rating"])
-            decision.action = {
-                "Buy": "Buy",
-                "Overweight": "Buy",
-                "Hold": "Hold",
-                "Underweight": "Sell",
-                "Sell": "Sell",
-            }.get(decision.rating, decision.action)
-        elif engine == "binance-native":
-            from app.config import get_settings
-
-            settings = get_settings()
-            memory = ctx.get("memory") or []
-            decision = overlay_decision(
-                decision,
-                [*analysts, bull, bear, plan, trader, *risk],
-                pair,
-                ind.last_close,
-                vol_mult,
-                memory=memory,
-                small_account=settings.small_account,
-            )
-            decision.size_pct = profit_size_pct(
-                decision.rating,
-                decision.confidence,
-                vol_mult,
-                small_account=settings.small_account,
-            )
-            if decision.engine == "binance-native":
-                decision.engine = "trading-agent"
-            if settings.small_account and decision.action == "Buy" and decision.entry:
-                # Don't clip a $10 runner at 2.4 ATR — trail toward the goal.
-                decision.take_profit = None
+        ta_result = {
+            "ticker": ta_decision.yahoo_symbol,
+            "rating": ta_decision.rating,
+            "final_trade_decision": ta_decision.portfolio_decision,
+            "error": ta_decision.error,
+        }
+        decision: Decision = portfolio_manager(
+            plan, trader, risk, ind, engine="TradingAgents", vol_mult=vol_mult
+        )
+        decision.rating = ta_decision.rating
+        decision.action = {"BUY": "Buy", "SELL": "Sell", "HOLD": "Hold"}.get(
+            ta_decision.action, "Hold"
+        )
+        decision.engine = "TradingAgents"
+        decision.thesis = ta_decision.thesis
+        decision.executive_summary = ta_decision.thesis[:240]
+        if not ta_decision.brain_online:
+            decision.action = "Hold"
+            decision.rating = "Hold"
+            decision.size_pct = 0.0
 
         order = None
         if execute:

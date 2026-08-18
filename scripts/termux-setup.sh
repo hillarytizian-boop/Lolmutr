@@ -33,7 +33,7 @@ fi
 # (Rust target aarch64-unknown-linux-android is not rustup-supported).
 python -m pip install --upgrade pip setuptools wheel
 # httpx + dotenv only. FastAPI/pydantic need Rust on Termux Python 3.14.
-python -m pip install --prefer-binary "httpx>=0.27.0" "python-dotenv>=1.0.0"
+python -m pip install --prefer-binary "httpx>=0.27.0" "python-dotenv>=1.0.0" "rich>=13.7.0"
 
 python -c "import httpx, dotenv; print('core deps ok', httpx.__version__)"
 

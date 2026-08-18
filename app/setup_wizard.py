@@ -50,6 +50,10 @@ def _write_env(values: dict[str, str]) -> None:
         f"LLM_PROVIDER={existing.get('LLM_PROVIDER', '')}",
         f"LLM_MODEL={existing.get('LLM_MODEL', '')}",
         f"LLM_BASE_URL={existing.get('LLM_BASE_URL', '')}",
+        f"TRADINGAGENTS_LLM_PROVIDER={existing.get('TRADINGAGENTS_LLM_PROVIDER', existing.get('LLM_PROVIDER', ''))}",
+        f"TRADINGAGENTS_DEEP_THINK_MODEL={existing.get('TRADINGAGENTS_DEEP_THINK_MODEL', '')}",
+        f"TRADINGAGENTS_QUICK_THINK_MODEL={existing.get('TRADINGAGENTS_QUICK_THINK_MODEL', '')}",
+        f"TRADINGAGENTS_MAX_DEBATE_ROUNDS={existing.get('TRADINGAGENTS_MAX_DEBATE_ROUNDS', '1')}",
     ]
     for spec in PROVIDERS.values():
         env = spec["env"]
@@ -97,7 +101,7 @@ def run_setup(*, start: bool = False) -> None:
         values["LLM_PROVIDER"] = provider
         key = _ask(f"{PROVIDERS[provider]['env']}", secret=True)
         if not key:
-            print("No LLM key — desk will use the native heuristic PM.")
+            print("No LLM key — TradingAgents stays offline and the book stays flat.")
         else:
             values[PROVIDERS[provider]["env"]] = key
         model = _ask("Model (enter for default)", PROVIDERS[provider]["model"])
@@ -158,8 +162,8 @@ def run_setup(*, start: bool = False) -> None:
         go = _ask("Start autotrader now? (Y/n)", "Y").lower()
         start = go not in {"n", "no"}
     if start:
-        from app.autotrader import run_autotrader
+        from app.cockpit import run_cockpit
 
-        run_autotrader()
+        run_cockpit()
     else:
         print("Start later with:  python -m app trade")

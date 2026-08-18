@@ -2,7 +2,11 @@
 
 A crypto trading firm in software. The [Tauric Research TradingAgents](https://github.com/TauricResearch/TradingAgents) graph — analysts, bull/bear researchers, trader, risk committee, portfolio manager — is wired to **Binance spot**.
 
-Default book is a **$10 stake compounding toward a $50 goal**. One position at a time, ~90% of cash on a clean Buy, winners trail, book locks when $50 is hit. That is a target, not a forecast.
+**TradingAgents is the only AI brain.** Binance adapters are the eyes and hands. A deterministic risk gate can block a ticket; it cannot invent a BUY.
+
+If `tradingagents` is not installed or no LLM key is set, every cycle is **HOLD**. Nothing else will invent a trade.
+
+Default book is a **$10 stake compounding toward a $50 goal**. That is a target, not a forecast.
 
 > Not financial advice. Paper is the default. Live trading stays locked until you type `I_UNDERSTAND`. Agents can be wrong.
 
