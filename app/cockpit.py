@@ -120,9 +120,21 @@ def run_cockpit(*, once: bool = False) -> None:
         view["cycle"] = state.cycle
         view["account"] = {**snap_acct, "day_pnl_pct": day_pnl}
         view["positions"] = snap_acct["positions"]
+        keys_state = "NONE"
+        if settings.binance_api_key:
+            from app.binance.probe import probe as _probe
+
+            if not hasattr(run_cockpit, "_binance_probe"):
+                run_cockpit._binance_probe = _probe(
+                    settings.binance_api_key,
+                    settings.binance_api_secret,
+                    testnet=settings.trading_mode == "testnet",
+                )
+            pr = run_cockpit._binance_probe
+            keys_state = "OK" if pr.get("signed_ok") else "FAIL"
         view["health"] = {
-            "Exchange API": "ONLINE" if ctx.connected else "OFFLINE",
-            "Market Data": ctx.feed.upper() if ctx.connected else "OFFLINE",
+            "Binance": "LIVE" if ctx.connected else "DEMO",
+            "Keys": keys_state,
             "TradingAgents": status["state"],
             "News": ctx.news.status,
             "Sentiment": ctx.sentiment.status if ctx.sentiment else "OFFLINE",

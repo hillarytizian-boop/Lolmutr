@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.models import Candle
 
 _TIMEOUT = 15.0
+_UA = {"User-Agent": "LolmutrDesk/1.0"}
 
 
 class BinanceError(RuntimeError):
@@ -29,7 +30,13 @@ class BinanceError(RuntimeError):
 def _get(base: str, path: str, params: dict[str, Any] | None = None) -> Any:
     url = f"{base}{path}"
     try:
-        response = httpx.get(url, params=params, timeout=_TIMEOUT)
+        response = httpx.get(
+            url,
+            params=params,
+            headers=_UA,
+            timeout=_TIMEOUT,
+            follow_redirects=True,
+        )
     except httpx.HTTPError as exc:
         raise BinanceError(f"Binance request failed: {exc}") from exc
     if response.status_code >= 400:
@@ -117,11 +124,16 @@ class BinanceSigned:
     def _signed(self, method: str, path: str, params: dict[str, Any]) -> Any:
         payload = dict(params)
         payload["timestamp"] = int(time.time() * 1000)
-        payload["recvWindow"] = 5000
+        payload["recvWindow"] = 60000
+        try:
+            tdata = _get(self.base, "/api/v3/time")
+            payload["timestamp"] = int(tdata["serverTime"])
+        except Exception:
+            pass
         query = urlencode(payload, doseq=True)
         signature = hmac.new(self.secret, query.encode("utf-8"), hashlib.sha256).hexdigest()
         url = f"{self.base}{path}?{query}&signature={signature}"
-        headers = {"X-MBX-APIKEY": self.key}
+        headers = {"X-MBX-APIKEY": self.key, "User-Agent": "LolmutrDesk/1.0"}
         try:
             response = httpx.request(method, url, headers=headers, timeout=_TIMEOUT)
         except httpx.HTTPError as exc:

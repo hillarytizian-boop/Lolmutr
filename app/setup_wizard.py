@@ -120,24 +120,19 @@ def run_setup(*, start: bool = False) -> None:
         mode = "paper"
     values["TRADING_MODE"] = mode
 
-    if mode in {"testnet", "live"}:
-        values["BINANCE_API_KEY"] = _ask("BINANCE_API_KEY", secret=True)
-        values["BINANCE_API_SECRET"] = _ask("BINANCE_API_SECRET", secret=True)
-        if mode == "live":
-            print()
-            print("LIVE sends real market orders. Type the exact phrase to unlock.")
-            confirm = _ask(f"Type {LIVE_CONFIRM_PHRASE} to unlock live")
-            values["BINANCE_LIVE_CONFIRM"] = confirm
-            if confirm != LIVE_CONFIRM_PHRASE:
-                print("Phrase did not match — forcing paper mode.")
-                values["TRADING_MODE"] = "paper"
-                values["BINANCE_LIVE_CONFIRM"] = ""
-    else:
-        # Keys optional in paper; keep them if the user wants them ready.
-        maybe = _ask("Save Binance keys now for later? (y/N)", "n").lower()
-        if maybe in {"y", "yes"}:
-            values["BINANCE_API_KEY"] = _ask("BINANCE_API_KEY", secret=True)
-            values["BINANCE_API_SECRET"] = _ask("BINANCE_API_SECRET", secret=True)
+    print()
+    print("Binance API keys (spot read). Needed to talk to your account.")
+    values["BINANCE_API_KEY"] = _ask("BINANCE_API_KEY", secret=True)
+    values["BINANCE_API_SECRET"] = _ask("BINANCE_API_SECRET", secret=True)
+    if mode == "live":
+        print()
+        print("LIVE sends real market orders. Type the exact phrase to unlock.")
+        confirm = _ask(f"Type {LIVE_CONFIRM_PHRASE} to unlock live")
+        values["BINANCE_LIVE_CONFIRM"] = confirm
+        if confirm != LIVE_CONFIRM_PHRASE:
+            print("Phrase did not match — forcing paper mode.")
+            values["TRADING_MODE"] = "paper"
+            values["BINANCE_LIVE_CONFIRM"] = ""
 
     values["WATCHLIST"] = _ask("Watchlist", "BTCUSDT,ETHUSDT,SOLUSDT")
     minutes = _ask("Minutes between loops", "15")
@@ -152,6 +147,20 @@ def run_setup(*, start: bool = False) -> None:
     _write_env(values)
     reload_env()
     settings = get_settings()
+    from app.binance.probe import probe
+
+    print()
+    print("Checking Binance…")
+    result = probe(
+        settings.binance_api_key,
+        settings.binance_api_secret,
+        testnet=settings.trading_mode == "testnet",
+    )
+    print("  public :", "OK" if result["public_ok"] else "FAIL", result.get("public_host") or "")
+    print("  keys   :", "OK" if result["signed_ok"] else "FAIL", result.get("signed_detail"))
+    if settings.binance_api_key and not result["signed_ok"]:
+        print("  hint   : enable Spot, turn off IP restriction or add this phone IP,")
+        print("           use api.binance.com keys (not binance.us), check secret.")
     # Fresh paper book at the new stake so an old $10k file does not linger.
     from app.binance.paper import PaperBroker
 

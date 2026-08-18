@@ -15,8 +15,9 @@ import time
 from typing import Any
 
 from app.binance.client import BinanceError, BinancePublic
+from app.binance.probe import pick_public_host
 from app.binance.symbols import to_binance
-from app.config import DEFAULT_WATCHLIST
+from app.config import DEFAULT_WATCHLIST, get_settings
 from app.models import Candle
 
 logger = logging.getLogger(__name__)
@@ -147,9 +148,12 @@ class MarketFeed:
     """Prefer live Binance; cache the choice so we don't TLS-fail every call."""
 
     def __init__(self) -> None:
-        self._live = BinancePublic()
+        picked, _ = pick_public_host()
+        host = picked or get_settings().public_rest
+        self._live = BinancePublic(base=host)
         self._demo = DemoPublic()
         self._backend: str | None = None
+        self.last_error = ""
 
     @property
     def source(self) -> str:
@@ -163,19 +167,29 @@ class MarketFeed:
         try:
             self._live.ping()
             self._backend = "binance"
-            logger.info("market feed: live Binance")
+            logger.info("market feed: live Binance %s", self._live.base)
             return self._live
         except BinanceError as exc:
+            picked, detail = pick_public_host()
+            if picked:
+                self._live = BinancePublic(base=picked)
+                self._backend = "binance"
+                logger.info("market feed: live Binance fallback %s", picked)
+                return self._live
             self._backend = "demo"
-            logger.warning("Binance unreachable (%s); using demo feed", exc)
+            self.last_error = detail or str(exc)
+            logger.warning("Binance unreachable; using demo feed")
             return self._demo
 
     def ping(self) -> bool:
+        backend = self._pick()
+        if backend is self._demo:
+            return False
         try:
-            return bool(self._pick().ping())
+            return bool(backend.ping())
         except BinanceError:
             self._backend = "demo"
-            return True
+            return False
 
     def ticker(self, symbol: str) -> dict[str, Any]:
         return self._try("ticker", symbol)

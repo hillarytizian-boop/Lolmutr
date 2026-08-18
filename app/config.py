@@ -140,8 +140,8 @@ def get_settings() -> Settings:
     return Settings(
         trading_mode=_mode(),
         paper_starting_cash=float(os.getenv("PAPER_STARTING_CASH") or os.getenv("STAKE_USD") or 10),
-        binance_api_key=(os.getenv("BINANCE_API_KEY") or "").strip(),
-        binance_api_secret=(os.getenv("BINANCE_API_SECRET") or "").strip(),
+        binance_api_key=(os.getenv("BINANCE_API_KEY") or "").strip().strip('"').strip("'"),
+        binance_api_secret=(os.getenv("BINANCE_API_SECRET") or "").strip().strip('"').strip("'"),
         live_confirm=(os.getenv("BINANCE_LIVE_CONFIRM") or "").strip(),
         host=os.getenv("HOST") or "0.0.0.0",
         port=int(os.getenv("PORT") or 8000),
