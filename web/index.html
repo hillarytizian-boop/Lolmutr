@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lolmutr · Binance Trading Desk</title>
+  <link rel="icon" href="/assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/assets/logo.png" alt="Lolmutr" />
+      <div>
+        <div class="brand-name">LOLMUTR</div>
+        <div class="brand-sub">TradingAgents × Binance</div>
+      </div>
+    </div>
+    <div class="ticker-tape" id="tape"></div>
+    <div class="top-meta">
+      <span class="pill" id="modePill">PAPER</span>
+      <span class="pill dim" id="enginePill">native desk</span>
+      <span class="clock" id="clock"></span>
+    </div>
+  </header>
+
+  <div class="banner" id="feedBanner" hidden>Live Binance is unreachable from this host — the desk is marking a deterministic demo tape. Paper fills still work. On your machine it will hit api.binance.com.</div>
+
+  <main class="desk">
+    <aside class="panel watch">
+      <div class="panel-h">
+        <h2>Watchlist</h2>
+        <span class="hint">USDT spot</span>
+      </div>
+      <div id="watchlist" class="watch-list"></div>
+    </aside>
+
+    <section class="center">
+      <div class="panel chart-wrap">
+        <div class="chart-head">
+          <div>
+            <div class="sym" id="symName">BTCUSDT</div>
+            <div class="px" id="symPx">—</div>
+          </div>
+          <div class="intervals" id="intervals">
+            <button data-tf="15m">15m</button>
+            <button data-tf="1h" class="on">1h</button>
+            <button data-tf="4h">4h</button>
+            <button data-tf="1d">1d</button>
+          </div>
+          <button class="cta" id="analyzeBtn">Run desk</button>
+        </div>
+        <div id="chart" class="chart"></div>
+      </div>
+      <div class="split">
+        <div class="panel book">
+          <div class="panel-h"><h2>Order book</h2><span class="hint" id="spreadHint">spread</span></div>
+          <div id="book" class="book-grid"></div>
+        </div>
+        <div class="panel news">
+          <div class="panel-h"><h2>Wire</h2><span class="hint" id="fgHint">Fear &amp; Greed</span></div>
+          <div id="news" class="news-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <div class="panel decision" id="decisionCard">
+        <div class="panel-h"><h2>Portfolio Manager</h2><span class="hint">5-tier rating</span></div>
+        <div class="rating" id="rating">HOLD</div>
+        <div class="rating-sub" id="ratingSub">Awaiting first run</div>
+        <div class="metrics" id="decisionMetrics"></div>
+        <label class="check">
+          <input type="checkbox" id="autoExec" />
+          Paper-fill the ticket after the PM speaks
+        </label>
+      </div>
+      <div class="panel agents">
+        <div class="panel-h"><h2>The firm</h2><span class="hint">TradingAgents graph</span></div>
+        <ol class="pipeline" id="pipeline">
+          <li data-k="market">Market Analyst</li>
+          <li data-k="sentiment">Sentiment Analyst</li>
+          <li data-k="news">News Analyst</li>
+          <li data-k="structure">Market Structure</li>
+          <li data-k="debate">Bull / Bear debate</li>
+          <li data-k="plan">Research Manager</li>
+          <li data-k="trader">Trader</li>
+          <li data-k="risk">Risk committee</li>
+          <li data-k="pm">Portfolio Manager</li>
+        </ol>
+      </div>
+    </aside>
+  </main>
+
+  <section class="bottom">
+    <div class="panel reports">
+      <div class="panel-h"><h2>Debate floor</h2><span class="hint" id="runMeta"></span></div>
+      <div id="reports" class="report-grid empty">Run the desk to hear the analysts.</div>
+    </div>
+    <div class="panel port">
+      <div class="panel-h">
+        <h2>Paper book</h2>
+        <button class="ghost" id="resetBtn">Reset</button>
+      </div>
+      <div class="equity" id="equity">—</div>
+      <div id="positions" class="pos-list"></div>
+      <div id="orders" class="order-list"></div>
+    </div>
+  </section>
+
+  <footer>
+    Research desk, not investment advice. Default venue is a paper book marked to Binance last.
+    Official graph: <a href="https://github.com/TauricResearch/TradingAgents" target="_blank" rel="noreferrer">TauricResearch/TradingAgents</a>
+  </footer>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
