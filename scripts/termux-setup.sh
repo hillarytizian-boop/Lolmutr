@@ -41,7 +41,9 @@ echo "Fetching official TradingAgents (signal source)..."
 bash "$ROOT/scripts/fetch-tradingagents.sh" || echo "clone failed — firm still runs from bundled official prompts"
 
 echo
-echo "Next: paste your LLM key and (optional) Binance keys."
-echo "Paper is the default. Live needs the phrase I_UNDERSTAND."
+echo "Use the venv python, not Termux system python:"
+echo "  . .venv/bin/activate"
+echo "  python -m app setup"
+echo "or:  bash scripts/run.sh setup"
 echo
-exec python -m app setup --start
+exec .venv/bin/python -m app setup --start

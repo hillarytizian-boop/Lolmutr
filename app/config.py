@@ -6,9 +6,29 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_env(*, override: bool = False) -> None:
+    """Load KEY=value lines from .env. No python-dotenv required."""
+    path = ROOT / ".env"
+    if not path.exists():
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if not key:
+            continue
+        if override or key not in os.environ:
+            os.environ[key] = val
 
 VALID_MODES = ("paper", "testnet", "live")
 BINANCE_SPOT = "https://api.binance.com"
@@ -33,10 +53,6 @@ AUTO_WATCHLIST = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
 DATA_DIR = Path(os.getenv("LOLMUTR_DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 HALT_FILE = DATA_DIR / "HALT"
-
-
-def load_env(*, override: bool = False) -> None:
-    load_dotenv(ROOT / ".env", override=override)
 
 
 def reload_env() -> None:
