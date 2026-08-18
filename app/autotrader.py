@@ -21,6 +21,7 @@ from app.binance.executor import ExecutionError, execute_decision
 from app.binance.feed import MarketFeed
 from app.binance.paper import PaperBroker
 from app.config import DATA_DIR, HALT_FILE, get_settings
+from app.profit import exit_reason, memory_line, new_bracket, update_bracket
 from app.store import RunStore
 
 logger = logging.getLogger("lolmutr.auto")
@@ -38,7 +39,14 @@ def utc_day() -> str:
 
 def load_state(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return {"day": utc_day(), "start_equity": None, "last_trade": {}, "halted": False}
+        return {
+            "day": utc_day(),
+            "start_equity": None,
+            "last_trade": {},
+            "halted": False,
+            "brackets": {},
+            "memory": [],
+        }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -47,6 +55,8 @@ def load_state(path: Path) -> dict[str, Any]:
     data.setdefault("start_equity", None)
     data.setdefault("last_trade", {})
     data.setdefault("halted", False)
+    data.setdefault("brackets", {})
+    data.setdefault("memory", [])
     return data
 
 
@@ -93,7 +103,9 @@ def should_trade(
             return Gate(False, f"max positions {max_positions}")
     if action == "Sell" and symbol not in open_symbols:
         return Gate(False, "no position to sell")
-    if last_trade_iso and cooldown_minutes > 0:
+    # Flattening an open long is how the agent banks profit — cooldown
+    # only applies to new entries.
+    if action == "Buy" and last_trade_iso and cooldown_minutes > 0:
         try:
             last = datetime.fromisoformat(last_trade_iso)
             if last.tzinfo is None:
@@ -156,35 +168,165 @@ def run_autotrader(*, once: bool = False) -> None:
     signal.signal(signal.SIGTERM, _stop)
 
     logger.info(
-        "autotrader start mode=%s execute=%s llm=%s watchlist=%s interval=%s loop=%ss",
+        "trading-agent start mode=%s execute=%s llm=%s watchlist=%s "
+        "analyze=%ss manage=%ss trail=%.2f ATR",
         settings.trading_mode,
         settings.auto_execute,
-        settings.llm_provider or "none",
+        settings.llm_provider or "native-firm",
         ",".join(settings.watchlist),
-        settings.interval,
         settings.loop_seconds,
+        settings.manage_seconds,
+        settings.trail_atr,
     )
     logger.info("stop: Ctrl+C or  touch %s", HALT_FILE)
 
     cycle = 0
+    since_analyze = settings.loop_seconds  # run the firm on the first tick
     while not stop["flag"]:
         if HALT_FILE.exists():
             logger.warning("HALT file present at %s — exiting", HALT_FILE)
             break
-        cycle += 1
         try:
-            _cycle(desk, broker, public, store, state, state_path, cycle)
+            _manage_open(broker, public, state, state_path)
+            if since_analyze >= settings.loop_seconds:
+                cycle += 1
+                _cycle(desk, broker, public, store, state, state_path, cycle)
+                since_analyze = 0
         except Exception:
-            logger.exception("cycle %s failed", cycle)
+            logger.exception("cycle failed")
         if once or stop["flag"]:
             break
-        for _ in range(max(1, settings.loop_seconds)):
+        step = max(1, min(settings.manage_seconds, settings.loop_seconds))
+        for _ in range(step):
             if stop["flag"] or HALT_FILE.exists():
                 break
             time.sleep(1)
+        since_analyze += step
 
     save_state(state_path, state)
-    logger.info("autotrader stopped after %s cycle(s)", cycle)
+    logger.info("trading-agent stopped after %s analyze cycle(s)", cycle)
+
+
+def _flatten(
+    broker: PaperBroker,
+    symbol: str,
+    qty: float,
+    price: float,
+    reason: str,
+    state: dict[str, Any],
+    engine: str,
+) -> dict[str, Any] | None:
+    settings = get_settings()
+    if settings.trading_mode != "paper" and settings.signed_ready:
+        order = execute_decision(symbol, "Sell", 0.0, price, reason, broker) or {}
+    else:
+        order = broker.market_order(symbol, "SELL", quantity=qty, price=price, reason=reason)
+    rec = {
+        "symbol": symbol,
+        "reason": reason,
+        "realized_pnl": float(order.get("realized_pnl") or 0),
+        "price": price,
+        "engine": engine,
+        "ts": order.get("ts"),
+    }
+    state.setdefault("memory", []).append(rec)
+    state["memory"] = state["memory"][-24:]
+    state.setdefault("brackets", {}).pop(symbol, None)
+    logger.info(
+        "  %s  BANK %s  pnl=%+.2f  @ %s  (%s)",
+        symbol,
+        reason,
+        rec["realized_pnl"],
+        price,
+        memory_line(rec),
+    )
+    return order
+
+
+def _manage_open(
+    broker: PaperBroker,
+    public: MarketFeed,
+    state: dict[str, Any],
+    state_path: Path,
+) -> None:
+    """Capture profit / cut losers on open longs before the next agent vote."""
+    settings = get_settings()
+    if not settings.auto_execute or state.get("halted"):
+        return
+    snap = broker.snapshot()
+    if not snap["positions"]:
+        return
+    marks: dict[str, float] = {}
+    atrs: dict[str, float] = {}
+    for pos in snap["positions"]:
+        symbol = pos["symbol"]
+        try:
+            marks[symbol] = public.price(symbol)
+        except Exception:
+            continue
+        bracket = (state.get("brackets") or {}).get(symbol) or {}
+        atrs[symbol] = float(bracket.get("atr") or 0)
+        if atrs[symbol] <= 0:
+            try:
+                candles = public.klines(symbol, settings.interval, 80)
+                from app.binance.indicators import compute_indicators
+
+                atrs[symbol] = compute_indicators(candles).atr
+            except Exception:
+                atrs[symbol] = 0.0
+
+    for pos in snap["positions"]:
+        symbol = pos["symbol"]
+        mark = marks.get(symbol)
+        if mark is None:
+            continue
+        brackets = state.setdefault("brackets", {})
+        bracket = brackets.get(symbol)
+        if not bracket:
+            entry = float(pos["avg_price"])
+            atr = atrs.get(symbol) or entry * 0.01
+            bracket = new_bracket(
+                entry,
+                entry - 1.6 * atr,
+                entry + 2.4 * atr,
+                atr,
+                settings.trail_atr,
+            )
+        bracket = update_bracket(bracket, mark)
+        if atrs.get(symbol):
+            bracket["atr"] = atrs[symbol]
+        brackets[symbol] = bracket
+        why = exit_reason(
+            mark=mark,
+            take=bracket.get("take"),
+            hard_stop=bracket.get("stop"),
+            high=float(bracket.get("high") or mark),
+            atr=float(bracket.get("atr") or 0),
+            trail_mult=float(bracket.get("trail_mult") or settings.trail_atr),
+        )
+        if not why:
+            logger.info(
+                "  %s  hold  mark=%.6g  high=%.6g  stop=%s  take=%s",
+                symbol,
+                mark,
+                bracket["high"],
+                bracket.get("stop"),
+                bracket.get("take"),
+            )
+            continue
+        try:
+            _flatten(
+                broker,
+                symbol,
+                float(pos["qty"]),
+                mark,
+                why,
+                state,
+                "trading-agent",
+            )
+        except (ExecutionError, ValueError) as exc:
+            logger.error("  %s  %s failed: %s", symbol, why, exc)
+    save_state(state_path, state)
 
 
 def _cycle(
@@ -239,7 +381,13 @@ def _cycle(
         if HALT_FILE.exists() or state.get("halted"):
             break
         try:
-            run = desk.analyze(symbol, interval=settings.interval, execute=False)
+            lessons = [memory_line(row) for row in state.get("memory") or []]
+            run = desk.analyze(
+                symbol,
+                interval=settings.interval,
+                execute=False,
+                extra_context={"memory": lessons},
+            )
         except Exception:
             logger.exception("analyze failed for %s", symbol)
             continue
@@ -291,8 +439,25 @@ def _cycle(
         state.setdefault("last_trade", {})[symbol] = now.isoformat()
         if order.get("side") == "BUY" and symbol not in open_symbols:
             open_symbols.append(symbol)
+            atr = float((run.get("indicators") or {}).get("atr") or 0)
+            state.setdefault("brackets", {})[symbol] = new_bracket(
+                float(run["price"]),
+                decision.get("stop_loss"),
+                decision.get("take_profit"),
+                atr,
+                settings.trail_atr,
+            )
         if order.get("side") == "SELL" and symbol in open_symbols:
             open_symbols.remove(symbol)
+            rec = {
+                "symbol": symbol,
+                "reason": f"agent-{decision['rating']}",
+                "realized_pnl": float(order.get("realized_pnl") or 0),
+                "engine": decision.get("engine"),
+            }
+            state.setdefault("memory", []).append(rec)
+            state["memory"] = state["memory"][-24:]
+            state.setdefault("brackets", {}).pop(symbol, None)
         save_state(state_path, state)
         logger.info(
             "%s  FILL %s %.6g @ %s on %s",

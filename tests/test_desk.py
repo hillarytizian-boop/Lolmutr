@@ -24,4 +24,4 @@ def test_desk_runs_end_to_end_on_demo_feed(tmp_path: Path):
     assert "Market Analyst" in names
     assert "Trader" in names
     assert "Research Manager" in names
-    assert run["decision"]["engine"] == "binance-native"
+    assert run["decision"]["engine"] in {"binance-native", "trading-agent"}

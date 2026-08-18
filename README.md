@@ -50,7 +50,15 @@ Binance key permissions: **spot read + spot trade only**. Do not enable withdraw
 
 ## What the loop does
 
-Every `LOOP_SECONDS` (default 15 minutes) it runs the firm on each watchlist pair and, if gates pass, sends the ticket:
+The TradingAgents firm picks the trade. A profit layer then manages the open long so winners get banked instead of given back:
+
+- **Take-profit** at the PM target (~2.4 ATR)
+- **Hard stop** at 1.6 ATR
+- **Trailing stop** that ratchets up as price makes new highs
+- **Agent Sell** flattens immediately (cooldown does not block exits)
+- Closed-trade PnL is fed back into the next PM vote
+
+Every `LOOP_SECONDS` (default 15 minutes) the firm votes. Every `MANAGE_SECONDS` (default 60s) stops and targets are checked. If the PM rating clears the gates, it fills:
 
 | Gate | Default |
 |---|---|
@@ -86,6 +94,9 @@ python -m pytest -q
 | `MIN_CONFIDENCE` | `0.58` | skip weaker tickets |
 | `MAX_DAILY_LOSS_PCT` | `5` | halt new tickets for the UTC day |
 | `AUTO_EXECUTE` | `true` | `false` = analyze only |
+| `MANAGE_SECONDS` | `60` | how often stops / targets are checked |
+| `TRAIL_ATR` | `1.4` | trailing-stop distance in ATRs |
+| `PROFIT_MODE` | `true` | conviction-weighted size, TP/SL/trail on |
 | `BINANCE_LIVE_CONFIRM` | empty | must be `I_UNDERSTAND` for live |
 | `LLM_PROVIDER` | empty | `groq` / `openai` / `openrouter` / … |
 

@@ -59,9 +59,16 @@ def test_daily_loss_breaker():
     assert "circuit" in g.reason
 
 
-def test_cooldown():
+def test_cooldown_blocks_new_buys_only():
     g = _gate(last_trade_iso="2026-08-18T11:30:00+00:00", cooldown_minutes=45)
     assert g.allow is False
+    sell = _gate(
+        action="Sell",
+        open_symbols=["BTCUSDT"],
+        last_trade_iso="2026-08-18T11:30:00+00:00",
+        cooldown_minutes=45,
+    )
+    assert sell.allow is True
 
 
 def test_live_locked():

@@ -26,6 +26,7 @@ from app.agents.context import fetch_fear_greed, fetch_news
 from app.agents.llm_bridge import probe, run_tradingagents
 from app.agents.portfolio import portfolio_manager
 from app.llm import overlay_decision
+from app.profit import profit_size_pct
 from app.agents.researchers import bear_researcher, bull_researcher, research_manager
 from app.agents.risk import risk_committee, risk_multiplier
 from app.agents.trader import trader_agent

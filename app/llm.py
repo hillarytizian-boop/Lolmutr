@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from app.models import RATINGS, Decision, rating_size_pct, rating_to_action
+from app.models import RATINGS, Decision, rating_to_action
 
 logger = logging.getLogger(__name__)
 
@@ -162,8 +162,9 @@ def overlay_decision(
     symbol: str,
     price: float,
     vol_mult: float,
+    memory: list[str] | None = None,
 ) -> Decision:
-    """Ask the LLM to confirm or revise the 5-tier rating. Fail-open."""
+    """TradingAgents PM overlay: maximize risk-adjusted profit. Fail-open."""
     if not llm_configured():
         return decision
     brief = []
@@ -174,29 +175,37 @@ def overlay_decision(
             brief.append(
                 f"- {report.get('name')} [{report.get('stance')}]: {report.get('summary')}"
             )
+    lessons = "\n".join(f"- {row}" for row in (memory or [])[-8:]) or "- none yet"
     user = (
         f"Symbol {symbol} last {price}. Heuristic rating {decision.rating} "
-        f"(score {decision.score:+.2f}, size {decision.size_pct:.2%}).\n"
+        f"(score {decision.score:+.2f}, stop {decision.stop_loss}, "
+        f"target {decision.take_profit}).\n"
         f"Analyst book:\n" + "\n".join(brief) + "\n\n"
+        f"Recent closed trades (learn what paid):\n{lessons}\n\n"
         "Reply with JSON only: "
         '{"rating":"Buy|Overweight|Hold|Underweight|Sell","confidence":0.0,'
         '"thesis":"two sentences"}'
     )
     text = complete(
-        "You are the Portfolio Manager of a crypto spot desk. "
-        "Be conservative. Prefer Hold when evidence is mixed. Never invent prices.",
+        "You are the TradingAgents Portfolio Manager on a Binance spot desk. "
+        "Mandate: maximize risk-adjusted profit. Take winners, cut losers, "
+        "do not sit on a fading long. Prefer a clean Buy or Sell when the "
+        "book agrees; use Hold only when the edge is truly gone. "
+        "Never invent prices. Never ignore a stop.",
         user,
     )
     parsed = parse_llm_rating(text or "")
     if not parsed:
         return decision
+    from app.profit import profit_size_pct
+
     decision.rating = parsed["rating"]
     decision.action = rating_to_action(decision.rating)
-    decision.size_pct = rating_size_pct(decision.rating, vol_mult)
+    if parsed.get("confidence") is not None:
+        decision.confidence = parsed["confidence"]
+    decision.size_pct = profit_size_pct(decision.rating, decision.confidence, vol_mult)
     if parsed.get("thesis"):
         decision.thesis = parsed["thesis"]
         decision.executive_summary = parsed["thesis"][:240]
-    if parsed.get("confidence") is not None:
-        decision.confidence = parsed["confidence"]
-    decision.engine = "llm+binance"
+    decision.engine = "trading-agent"
     return decision

@@ -96,6 +96,9 @@ class Settings:
     llm_provider: str
     llm_model: str
     llm_base_url: str
+    manage_seconds: int
+    trail_atr: float
+    profit_mode: bool
 
     @property
     def binance_rest(self) -> str:
@@ -146,4 +149,7 @@ def get_settings() -> Settings:
         llm_provider=(os.getenv("LLM_PROVIDER") or "").strip().lower(),
         llm_model=(os.getenv("LLM_MODEL") or "").strip(),
         llm_base_url=(os.getenv("LLM_BASE_URL") or "").strip(),
+        manage_seconds=int(os.getenv("MANAGE_SECONDS") or 60),
+        trail_atr=float(os.getenv("TRAIL_ATR") or 1.4),
+        profit_mode=_bool("PROFIT_MODE", True),
     )
