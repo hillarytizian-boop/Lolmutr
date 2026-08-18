@@ -9,15 +9,17 @@ description = "Binance trading desk built on the TradingAgents multi-agent firm"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
     "httpx>=0.27.0",
-    "pydantic>=2.9.0",
     "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+web = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+]
 tradingagents = ["tradingagents @ git+https://github.com/TauricResearch/TradingAgents.git"]
 
 [project.scripts]

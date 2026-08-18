@@ -16,6 +16,8 @@ pkg install -y termux-api
 
 git clone -b arena/01a01418-lolmutr https://github.com/hillarytizian-boop/Lolmutr.git
 cd Lolmutr
+# If a previous run died on pydantic-core / Rust:
+rm -rf .venv
 bash scripts/termux-setup.sh
 ```
 

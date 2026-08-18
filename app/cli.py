@@ -45,8 +45,15 @@ def main(argv: list[str] | None = None) -> None:
         run_autotrader(once=True)
         return
     if cmd in {"serve", "web", "desk"}:
-        from app.main import run
-
+        try:
+            from app.main import run
+        except ImportError:
+            print(
+                "Web desk needs FastAPI. On a computer:\n"
+                "  pip install -r requirements-web.txt\n"
+                "On Termux stay with:  python -m app trade"
+            )
+            sys.exit(1)
         run()
         return
     print(HELP)

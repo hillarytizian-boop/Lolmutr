@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot Termux install: deps, venv, wizard, autotrader.
+# One-shot Termux install: lean deps (no pydantic/Rust), wizard, autotrader.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,8 +28,14 @@ if [ ! -d .venv ]; then
 fi
 # shellcheck disable=SC1091
 . .venv/bin/activate
-python -m pip install -U pip
-python -m pip install -r requirements.txt
+
+# Prefer wheels only. Termux Python 3.14 cannot compile pydantic-core
+# (Rust target aarch64-unknown-linux-android is not rustup-supported).
+python -m pip install --upgrade pip setuptools wheel
+# httpx + dotenv only. FastAPI/pydantic need Rust on Termux Python 3.14.
+python -m pip install --prefer-binary "httpx>=0.27.0" "python-dotenv>=1.0.0"
+
+python -c "import httpx, dotenv; print('core deps ok', httpx.__version__)"
 
 echo
 echo "Next: paste your LLM key and (optional) Binance keys."
