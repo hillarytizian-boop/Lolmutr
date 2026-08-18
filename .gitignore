@@ -1,0 +1,25 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime state (created automatically)
+data/*
+!data/.gitkeep
+
+# TradingAgents caches
+.tradingagents/
+results/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
