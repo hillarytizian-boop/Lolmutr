@@ -1,49 +1,38 @@
-"""Rich cockpit. TradingAgents is the brain; this is only the glass."""
+"""Termux-first cockpit: stacked panels, no 3-column crush, no HTML entities."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from app.config import get_settings
+
+HELP = "[q] quit  [p] pause  [r] resume  [t] report"
 
 
 def _try_rich():
     try:
         from rich import box
-        from rich.align import Align
         from rich.console import Console, Group
-        from rich.layout import Layout
         from rich.live import Live
         from rich.panel import Panel
         from rich.table import Table
-        from rich.text import Text
 
         return {
             "box": box,
-            "Align": Align,
             "Console": Console,
             "Group": Group,
-            "Layout": Layout,
             "Live": Live,
             "Panel": Panel,
             "Table": Table,
-            "Text": Text,
         }
     except ImportError:
         return None
 
 
-HELP = """\
-[q] quit   [p] pause   [r] resume   [t] last report
-[o] positions   [l] history   [h] help
-"""
-
-
 class CockpitUI:
     def __init__(self) -> None:
         self.rich = _try_rich()
-        self.console = self.rich["Console"]() if self.rich else None
+        self.console = self.rich["Console"](width=min(72, 80)) if self.rich else None
         self.live = None
 
     def render(self, view: dict[str, Any]) -> Any:
@@ -53,121 +42,91 @@ class CockpitUI:
         settings = get_settings()
         live = settings.trading_mode == "live" and settings.live_unlocked
         mode = "LIVE" if live else "DEMO"
-        mode_style = "bold white on red" if live else "bold black on yellow"
-        banner = (
-            "⚠ LIVE TRADING — real funds"
-            if live
-            else "⚠ DEMO MODE — no real funds used"
-        )
-
-        header = R["Table"].grid(expand=True)
-        header.add_column(justify="left")
-        header.add_column(justify="center")
-        header.add_column(justify="right")
-        header.add_row(
-            f"[bold]HILA AI TRADING TERMINAL[/]\n[dim]TradingAgents Intelligence Engine[/]",
-            f"[{mode_style}] {mode} [/{mode_style}]\n{banner}",
-            f"cycle #{view.get('cycle', 0)}  {view.get('clock', '')}",
-        )
-
         acct = view.get("account") or {}
-        acc = R["Table"](box=R["box"].SIMPLE, expand=True)
-        acc.add_column("ACCOUNT")
+        dec = view.get("decision") or {}
+        health = view.get("health") or {}
+
+        head = R["Table"].grid(expand=True)
+        head.add_column()
+        head.add_row("[bold]HILA  TradingAgents[/]")
+        head.add_row(
+            f"{mode}  cycle #{view.get('cycle', 0)}  {view.get('clock', '')}"
+        )
+        head.add_row("DEMO — paper wallet" if not live else "LIVE — real funds")
+
+        acc = R["Table"](box=R["box"].SIMPLE, expand=True, show_header=False)
+        acc.add_column()
         acc.add_column(justify="right")
-        acc.add_row("Balance", f"${acct.get('cash', 0):.2f}")
-        acc.add_row("Equity", f"${acct.get('equity', 0):.2f}")
-        acc.add_row("Available", f"${acct.get('cash', 0):.2f}")
-        acc.add_row("Unrealized P&L", f"${acct.get('unrealized_pnl', 0):+.2f}")
-        acc.add_row("Daily P&L", f"{acct.get('day_pnl_pct', 0):+.2f}%")
-        acc.add_row("Total P&L", f"{acct.get('pnl_pct', 0):+.2f}%")
-        acc.add_row("Source", "LIVE BALANCE" if live else "DEMO BALANCE")
+        acc.add_row("Equity", f"${float(acct.get('equity') or 0):.2f}")
+        acc.add_row("Cash", f"${float(acct.get('cash') or 0):.2f}")
+        acc.add_row("Day PnL", f"{float(acct.get('day_pnl_pct') or 0):+.2f}%")
+        acc.add_row("Total PnL", f"{float(acct.get('pnl_pct') or 0):+.2f}%")
 
         watch = R["Table"](box=R["box"].SIMPLE, expand=True)
-        watch.add_column("Symbol")
-        watch.add_column("Price", justify="right")
+        watch.add_column("Sym", style="bold")
+        watch.add_column("Px", justify="right")
         watch.add_column("Trend")
-        watch.add_column("Signal")
-        watch.add_column("Conf")
+        watch.add_column("Sig")
         for row in view.get("watch") or []:
             watch.add_row(
-                row.get("symbol", ""),
-                f"${row.get('price', 0):,.4g}",
-                row.get("trend", ""),
-                row.get("action", "HOLD"),
-                f"{int((row.get('confidence') or 0) * 100)}%",
+                str(row.get("symbol", "")).replace("USDT", ""),
+                f"{row.get('price', 0):.4g}",
+                str(row.get("trend", ""))[:3],
+                str(row.get("action", "HOLD"))[:4],
             )
 
-        stages = R["Table"](box=R["box"].SIMPLE, expand=True)
-        stages.add_column("TRADINGAGENTS BRAIN")
-        stages.add_column("Status")
-        labels = {
-            "market": "Technical Analyst",
-            "sentiment": "Sentiment Analyst",
-            "news": "News Analyst",
-            "fundamentals": "Fundamentals",
-            "bull": "Bull Researcher",
-            "bear": "Bear Researcher",
-            "trader": "Trader",
-            "risk": "Risk Management",
-            "portfolio": "Portfolio Manager",
-        }
-        for key, label in labels.items():
+        stages = R["Table"](box=R["box"].SIMPLE, expand=True, show_header=False)
+        stages.add_column()
+        stages.add_column()
+        labels = [
+            ("market", "Tech"),
+            ("sentiment", "Sent"),
+            ("news", "News"),
+            ("bull", "Bull"),
+            ("bear", "Bear"),
+            ("trader", "Trader"),
+            ("risk", "Risk"),
+            ("portfolio", "PM"),
+        ]
+        for key, label in labels:
             st = (view.get("stages") or {}).get(key, "IDLE")
-            mark = "✓" if st in {"COMPLETE", "SKIPPED", "EMPTY"} else "…"
-            stages.add_row(label, f"{mark} {st}")
+            mark = "ok" if st in {"COMPLETE", "SKIPPED", "EMPTY"} else st[:4]
+            stages.add_row(label, mark)
 
-        dec = view.get("decision") or {}
-        reason = (dec.get("thesis") or "Awaiting first TradingAgents cycle.")[:280]
-        current = (
-            f"[bold]{dec.get('symbol', '—')}[/]   Decision: [bold]{dec.get('action', 'HOLD')}[/]\n"
-            f"Rating: {dec.get('rating', 'Hold')}   Confidence: "
-            f"{int((dec.get('confidence') or 0) * 100)}%\n"
-            f"Position: {float(dec.get('position_size') or 0):.0%}   "
-            f"Brain: {dec.get('brain', 'TradingAgents')}\n"
-            f"[dim]{reason}[/]"
+        thesis = (dec.get("thesis") or "Waiting for first firm cycle.")[:220]
+        decision = (
+            f"{dec.get('symbol', '—')}  {dec.get('action', 'HOLD')}  "
+            f"{dec.get('rating', 'Hold')}\n"
+            f"conf {int((dec.get('confidence') or 0) * 100)}%  "
+            f"size {float(dec.get('position_size') or 0):.0%}\n"
+            f"{thesis}"
         )
 
-        pos_tbl = R["Table"](box=R["box"].SIMPLE, expand=True)
-        pos_tbl.add_column("POSITIONS")
-        pos_tbl.add_column("Qty", justify="right")
-        pos_tbl.add_column("uPnL", justify="right")
-        positions = view.get("positions") or []
-        if not positions:
-            pos_tbl.add_row("None", "", "")
-        for p in positions:
-            pos_tbl.add_row(p.get("symbol", ""), f"{p.get('qty', 0):.6g}", f"{p.get('unrealized_pnl', 0):+.2f}")
+        pos = view.get("positions") or []
+        pos_line = "flat"
+        if pos:
+            pos_line = "  ".join(
+                f"{p.get('symbol','').replace('USDT','')} {p.get('unrealized_pnl',0):+.2f}"
+                for p in pos
+            )
 
-        health = R["Table"](box=R["box"].SIMPLE, expand=True)
-        health.add_column("SYSTEM HEALTH")
-        health.add_column("Status")
-        for name, status in (view.get("health") or {}).items():
-            health.add_row(name, status)
+        sys_line = "  ".join(f"{k.split()[0]}:{v}" for k, v in health.items())
 
-        layout = R["Layout"]()
-        layout.split_column(
-            R["Layout"](R["Panel"](header, style="white"), size=5),
-            R["Layout"](name="mid"),
-            R["Layout"](R["Panel"](current, title="CURRENT DECISION"), size=8),
-            R["Layout"](name="low", size=8),
-            R["Layout"](R["Panel"](HELP, style="dim"), size=3),
+        return R["Group"](
+            R["Panel"](head, title="HILA"),
+            R["Panel"](acc, title="ACCOUNT"),
+            R["Panel"](watch, title="WATCH"),
+            R["Panel"](stages, title="FIRM"),
+            R["Panel"](decision, title="DECISION"),
+            R["Panel"](pos_line, title="POSITIONS"),
+            R["Panel"](sys_line + "\n" + HELP, title="HEALTH"),
         )
-        layout["mid"].split_row(
-            R["Layout"](R["Panel"](acc)),
-            R["Layout"](R["Panel"](watch, title="MARKET WATCH")),
-            R["Layout"](R["Panel"](stages)),
-        )
-        layout["low"].split_row(
-            R["Layout"](R["Panel"](pos_tbl)),
-            R["Layout"](R["Panel"](health)),
-        )
-        return layout
 
     def _plain(self, view: dict[str, Any]) -> str:
         dec = view.get("decision") or {}
         acct = view.get("account") or {}
         return (
-            f"[{view.get('clock')}] cycle={view.get('cycle')} "
-            f"equity=${acct.get('equity', 0):.2f} "
-            f"{dec.get('symbol', '')} {dec.get('action', 'HOLD')} "
-            f"brain={dec.get('brain', 'TradingAgents')}"
+            f"[{view.get('clock')}] #{view.get('cycle')} "
+            f"equity=${float(acct.get('equity') or 0):.2f} "
+            f"{dec.get('symbol', '')} {dec.get('action', 'HOLD')}"
         )

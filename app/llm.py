@@ -44,6 +44,11 @@ PROVIDERS: dict[str, dict[str, str]] = {
         "env": "XAI_API_KEY",
         "model": "grok-2-latest",
     },
+    "nvidia": {
+        "base": "https://integrate.api.nvidia.com/v1",
+        "env": "NVIDIA_API_KEY",
+        "model": "z-ai/glm-5.2",
+    },
     "gemini": {
         "base": "https://generativelanguage.googleapis.com/v1beta/openai",
         "env": "GOOGLE_API_KEY",
@@ -124,7 +129,7 @@ def parse_llm_rating(text: str) -> dict[str, Any] | None:
     return {"rating": rating, "thesis": thesis, "confidence": confidence}
 
 
-def complete(system: str, user: str, timeout: float = 25.0) -> str | None:
+def complete(system: str, user: str, timeout: float = 90.0) -> str | None:
     endpoint = resolve_endpoint()
     if not endpoint:
         return None
@@ -150,7 +155,16 @@ def complete(system: str, user: str, timeout: float = 25.0) -> str | None:
         )
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"].get("content")
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict):
+                    parts.append(str(part.get("text") or part.get("content") or ""))
+                else:
+                    parts.append(str(part))
+            return "".join(parts) or None
+        return content
     except Exception as exc:
         logger.warning("LLM call failed: %s", exc)
         return None

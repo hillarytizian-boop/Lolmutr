@@ -95,8 +95,8 @@ def run_setup(*, start: bool = False) -> None:
         "MAX_POSITIONS": "1",
     }
 
-    providers = "/".join(["none", *PROVIDERS])
-    provider = _ask(f"LLM provider ({providers})", "groq").lower()
+    providers = "/".join(["nvidia", "none", *[p for p in PROVIDERS if p != "nvidia"]])
+    provider = _ask(f"LLM provider ({providers})", "nvidia").lower()
     if provider in PROVIDERS:
         values["LLM_PROVIDER"] = provider
         key = _ask(f"{PROVIDERS[provider]['env']}", secret=True)
@@ -106,6 +106,12 @@ def run_setup(*, start: bool = False) -> None:
             values[PROVIDERS[provider]["env"]] = key
         model = _ask("Model (enter for default)", PROVIDERS[provider]["model"])
         values["LLM_MODEL"] = model
+        if provider == "nvidia":
+            values["LLM_BASE_URL"] = "https://integrate.api.nvidia.com/v1"
+            values["TRADINGAGENTS_LLM_PROVIDER"] = "openai_compatible"
+            values["TRADINGAGENTS_LLM_BACKEND_URL"] = "https://integrate.api.nvidia.com/v1"
+            values["TRADINGAGENTS_DEEP_THINK_MODEL"] = model
+            values["TRADINGAGENTS_QUICK_THINK_MODEL"] = model
     else:
         values["LLM_PROVIDER"] = ""
 

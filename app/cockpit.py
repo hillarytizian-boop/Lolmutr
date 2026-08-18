@@ -152,10 +152,31 @@ def run_cockpit(*, once: bool = False) -> None:
                 def on_stage(name: str, status_s: str, _cid=cid) -> None:
                     view.setdefault("stages", {})[name] = status_s
 
+                snap = ctx.snapshots.get(to_binance(symbol))
+                blob_parts = [ctx.note]
+                if snap:
+                    blob_parts.append(
+                        f"{snap.symbol} last={snap.price} chg24h={snap.change_pct:+.2f}% "
+                        f"RSI={snap.rsi:.1f} ATR%={snap.atr_pct:.2f} trend={snap.trend} "
+                        f"EMA20={snap.ema20:.6g} EMA50={snap.ema50:.6g}"
+                    )
+                if ctx.sentiment and ctx.sentiment.value is not None:
+                    blob_parts.append(
+                        f"FearGreed={ctx.sentiment.value} ({ctx.sentiment.classification})"
+                    )
+                else:
+                    blob_parts.append("FearGreed=unavailable (not invented)")
+                if ctx.news.headlines:
+                    blob_parts.append(
+                        "Headlines: "
+                        + " | ".join(h.get("title", "") for h in ctx.news.headlines[:4])
+                    )
+                else:
+                    blob_parts.append("News wire unavailable (not invented)")
                 decision: TradeDecision = brain.analyze(
                     symbol,
                     cycle_id=cid,
-                    market_note=ctx.note,
+                    market_note="\n".join(blob_parts),
                     on_stage=on_stage,
                 )
                 snap = ctx.snapshots.get(to_binance(symbol))
@@ -235,7 +256,7 @@ def run_cockpit(*, once: bool = False) -> None:
             from rich.live import Live
 
             if ui.live is None:
-                ui.live = Live(ui.render(view), console=ui.console, refresh_per_second=4, screen=True)
+                ui.live = Live(ui.render(view), console=ui.console, refresh_per_second=2, screen=False)
                 ui.live.start()
             else:
                 ui.live.update(ui.render(view))

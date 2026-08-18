@@ -9,6 +9,14 @@ from market.market_data import SymbolSnapshot
 from risk.execution_gate import execution_gate
 
 
+def test_nvidia_glm_is_default_provider():
+    from app.llm import PROVIDERS
+
+    assert "nvidia" in PROVIDERS
+    assert PROVIDERS["nvidia"]["env"] == "NVIDIA_API_KEY"
+    assert PROVIDERS["nvidia"]["model"] == "z-ai/glm-5.2"
+
+
 def test_offline_brain_is_hold_never_buy():
     brain = TradingAgentsBrain()
     decision = brain.analyze("BTCUSDT", cycle_id="test-offline")

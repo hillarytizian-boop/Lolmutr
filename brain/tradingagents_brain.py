@@ -185,13 +185,24 @@ class TradingAgentsBrain:
         ok, detail = self.available()
         if not ok:
             thesis = (
-                f"TradingAgents is the only decision brain and it is offline: {detail}. "
-                "Staying flat. No fallback model will invent a BUY or SELL."
+                f"TradingAgents is offline: {detail}. "
+                "Staying flat. Paste NVIDIA_API_KEY in setup to run the firm on GLM-5.2."
             )
             return TradeDecision.hold(symbol, thesis, cycle_id=cycle_id, error=detail)
 
         graph = self._graph_or_none()
         if graph is None:
+            from app.llm import llm_configured
+            from brain.firm_runtime import run_firm
+
+            if llm_configured():
+                logger.info("%s running TradingAgents firm on NVIDIA/GLM endpoint", cycle_id)
+                return run_firm(
+                    symbol,
+                    cycle_id=cycle_id,
+                    market_blob=market_note or f"symbol={symbol}",
+                    on_stage=on_stage,
+                )
             return TradeDecision.hold(
                 symbol,
                 f"TradingAgents failed to initialize: {self._init_error}",
