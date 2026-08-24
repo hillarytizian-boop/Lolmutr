@@ -5,10 +5,11 @@ from market.sentiment import fetch_sentiment
 def test_news_401_does_not_raise(monkeypatch):
     import market.news as news
 
-    def boom(_limit: int):
+    def boom(*_a, **_k):
         raise RuntimeError("401 Unauthorized")
 
     monkeypatch.setattr(news, "_cryptocompare", boom)
+    monkeypatch.setattr(news, "_rss", boom)
     bundle = fetch_news_bundle()
     assert bundle.headlines == []
     assert "cryptocompare" in bundle.providers_down

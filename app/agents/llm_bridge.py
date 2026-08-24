@@ -17,6 +17,9 @@ from app.binance.symbols import to_yahoo
 logger = logging.getLogger(__name__)
 
 _LLM_ENV = (
+    "NVIDIA_API_KEY",
+    "NVIDIA_NIM_API_KEY",
+    "NVAPI_KEY",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GOOGLE_API_KEY",

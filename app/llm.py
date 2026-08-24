@@ -74,6 +74,9 @@ def detect_provider() -> str | None:
 
 
 def llm_key_present() -> bool:
+    from app.config import alias_secrets
+
+    alias_secrets()
     names = (
         "NVIDIA_API_KEY",
         "NVIDIA_NIM_API_KEY",
@@ -87,6 +90,11 @@ def llm_key_present() -> bool:
         "GROQ_API_KEY",
     )
     return any((os.getenv(n) or "").strip() for n in names)
+
+
+def llm_configured() -> bool:
+    """True when a usable LLM key is present. Used by the TradingAgents firm."""
+    return llm_key_present() and resolve_endpoint() is not None
 
 
 def resolve_endpoint() -> tuple[str, str, str] | None:

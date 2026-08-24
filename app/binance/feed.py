@@ -147,13 +147,19 @@ class DemoPublic:
 class MarketFeed:
     """Prefer live Binance; cache the choice so we don't TLS-fail every call."""
 
-    def __init__(self, host: str | None = None) -> None:
-        picked, _ = pick_public_host()
-        chosen = host or picked or get_settings().public_rest
+    def __init__(self, host: str | None = None, allow_demo: bool | None = None) -> None:
+        settings = get_settings()
+        pick_detail = ""
+        picked = None
+        if not host:
+            picked, pick_detail = pick_public_host()
+        chosen = host or picked or settings.public_rest
         self._live = BinancePublic(base=chosen)
         self._demo = DemoPublic()
-        self._backend: str | None = "binance" if host else None
-        self.last_error = ""
+        self.allow_demo = settings.allow_demo_tape if allow_demo is None else allow_demo
+        self._forced = bool(host)
+        self._backend: str | None = "binance" if (host or picked) else None
+        self.last_error = "" if (host or picked) else (pick_detail or "no public host")
 
     @property
     def source(self) -> str:
@@ -212,6 +218,9 @@ class MarketFeed:
             return getattr(backend, method)(*args)
         except BinanceError as exc:
             if backend is self._demo:
+                raise
+            if not self.allow_demo:
+                self.last_error = str(exc)
                 raise
             logger.warning("Binance %s failed (%s); flipping to demo", method, exc)
             self._backend = "demo"

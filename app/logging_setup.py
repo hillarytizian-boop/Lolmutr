@@ -54,3 +54,14 @@ def setup_logging() -> None:
     stream.setFormatter(fmt)
     stream.addFilter(RedactFilter())
     root.addHandler(stream)
+
+
+def tail_logs(n: int = 16) -> list[str]:
+    path = LOG_DIR / "system.log"
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return lines[-n:]

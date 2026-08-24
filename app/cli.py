@@ -12,6 +12,7 @@ Lolmutr — Binance desk on TradingAgents
   python -m app setup --start  same, skip the final confirm
   python -m app trade          start the autotrader (uses .env)
   python -m app once           one cycle and exit
+  python -m app test           DEMO end-to-end self-check
   python -m app serve          web desk (default)
 
 Termux:
@@ -51,6 +52,10 @@ def main(argv: list[str] | None = None) -> None:
 
         run_cockpit(once=True)
         return
+    if cmd in {"test", "selftest", "demo-test"}:
+        from app.selftest import run_selftest
+
+        raise SystemExit(run_selftest())
     if cmd in {"serve", "web", "desk"}:
         try:
             from app.main import run

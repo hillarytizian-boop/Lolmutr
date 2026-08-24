@@ -76,14 +76,22 @@ class PaperBroker:
         cash = float(self.state["cash"])
         equity = cash + sum(p["notional"] for p in positions)
         start = float(self.state.get("starting_cash") or self.starting_cash)
+        used = max(0.0, equity - cash)
+        realized = sum(float(o.get("realized_pnl") or 0) for o in self.state["orders"])
         return {
             "mode": "paper",
             "cash": cash,
             "equity": equity,
+            "wallet_balance": equity,
+            "available": cash,
+            "used_margin": used,
+            "free_margin": cash,
             "unrealized_pnl": unrealized,
-            "realized_pnl": sum(float(o.get("realized_pnl") or 0) for o in self.state["orders"]),
+            "realized_pnl": realized,
             "pnl": equity - start,
             "pnl_pct": ((equity - start) / start * 100.0) if start else 0.0,
+            "total_pnl": equity - start,
+            "total_pnl_pct": ((equity - start) / start * 100.0) if start else 0.0,
             "positions": positions,
             "orders": list(reversed(self.state["orders"][-50:])),
         }

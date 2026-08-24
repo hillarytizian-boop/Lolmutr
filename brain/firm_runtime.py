@@ -84,15 +84,25 @@ def run_firm(
     )
     logger.info("%s TradingAgents seats start %s", cycle_id, source_note)
 
+    stages: dict[str, str] = {name: "PENDING" for name in STAGES}
     for name in STAGES:
         stage(name, "PENDING")
 
     reports: dict[str, str] = {}
     tape = f"Instrument {symbol} (crypto spot).\n{market_blob}"
+    failed: list[str] = []
 
     def seat(name: str, system: str, user: str) -> str:
         stage(name, "RUNNING")
+        stages[name] = "RUNNING"
         text = complete(system, user, timeout=90.0) or ""
+        if not text.strip():
+            stages[name] = "FAILED"
+            stage(name, "FAILED")
+            failed.append(name)
+            logger.error("%s seat %s FAILED (empty LLM response)", cycle_id, name)
+            return ""
+        stages[name] = "COMPLETE"
         stage(name, "COMPLETE")
         return text
 
@@ -101,6 +111,7 @@ def run_firm(
         "sentiment", _SENTIMENT, tape + "\nMarket report:\n" + reports["market"]
     )
     reports["news"] = seat("news", _NEWS, tape + "\nSentiment:\n" + reports["sentiment"])
+    stages["fundamentals"] = "SKIPPED"
     stage("fundamentals", "SKIPPED")
     book = (
         f"Market research report: {reports['market']}\n"
@@ -125,23 +136,37 @@ def run_firm(
         f"Risk: {reports['risk']}",
     )
 
+    if "portfolio" in failed or not (reports.get("final") or "").strip():
+        reason = "Portfolio Manager seat returned no decision (LLM empty or timed out)"
+        logger.error("%s ANALYSIS FAILED %s", cycle_id, reason)
+        return TradeDecision.failed(
+            symbol, reason, cycle_id=cycle_id, reports=reports, stages=stages
+        )
+
+    if len(failed) >= 4:
+        reason = f"too many TradingAgents seats failed: {', '.join(failed)}"
+        logger.error("%s ANALYSIS FAILED %s", cycle_id, reason)
+        return TradeDecision.failed(
+            symbol, reason, cycle_id=cycle_id, reports=reports, stages=stages
+        )
+
     parse = official_parse_rating()
     rating = parse(reports["final"] or "")
-    if rating == "Hold":
-        parsed = parse_llm_rating(reports["final"] or "")
-        if parsed:
+    parsed = parse_llm_rating(reports["final"] or "")
+    confidence_provided = False
+    conf = 0.0
+    thesis = reports["final"] or "Portfolio Manager stayed flat."
+    if parsed:
+        if rating == "Hold" or not rating:
             rating = parsed["rating"]
-            conf = parsed.get("confidence") or 0.0
-            thesis = parsed.get("thesis") or reports["final"]
-        else:
-            conf = 0.0
-            thesis = reports["final"] or "Portfolio Manager stayed flat."
-    else:
-        parsed = parse_llm_rating(reports["final"] or "")
-        conf = (parsed or {}).get("confidence") or 0.0
-        thesis = (parsed or {}).get("thesis") or reports["final"]
+        if parsed.get("confidence") is not None:
+            conf = float(parsed["confidence"])
+            confidence_provided = True
+        if parsed.get("thesis"):
+            thesis = parsed["thesis"]
 
     action = _RATING_TO_ACTION.get(str(rating).lower(), "HOLD")
+    status = action if action in {"BUY", "SELL", "HOLD"} else "HOLD"
     logger.info("%s Portfolio Manager decision: %s", cycle_id, rating)
     return TradeDecision(
         symbol=symbol,
@@ -162,7 +187,10 @@ def run_firm(
         cycle_id=cycle_id,
         rating=str(rating),
         reports=reports,
-        stages={n: "SKIPPED" if n == "fundamentals" else "COMPLETE" for n in STAGES},
+        stages=stages,
         risk_source="none",
         brain_online=True,
+        status=status,
+        confidence_provided=confidence_provided,
+        reason=f"TradingAgents Portfolio Manager: {rating}",
     )

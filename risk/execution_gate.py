@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 
 from app.config import get_settings
 from brain.decision import TradeDecision
@@ -19,7 +18,7 @@ class GateResult:
     code: str
 
     def blocked_line(self) -> str:
-        return f"TRADE BLOCKED reason={self.reason}"
+        return f"TRADE REJECTED Reason: {self.reason}"
 
 
 def execution_gate(
@@ -35,19 +34,27 @@ def execution_gate(
     paused: bool,
     halted: bool,
     now: datetime | None = None,
+    exposure: float = 0.0,
+    synced: bool = True,
+    emergency: bool = False,
 ) -> GateResult:
     settings = get_settings()
     now = now or datetime.now(timezone.utc)
     action = (decision.action or "HOLD").upper()
+    status = (decision.status or action).upper()
 
-    if halted:
+    if emergency or halted:
         return GateResult(False, "emergency stop / halt", "HALT")
     if paused:
-        return GateResult(False, "trading paused", "PAUSED")
+        return GateResult(False, "trading paused — ANALYSIS: ON EXECUTION: PAUSED", "PAUSED")
     if settings.trading_mode == "live" and not settings.live_unlocked:
-        return GateResult(False, "live trading locked", "LIVE_LOCKED")
+        return GateResult(False, "live trading locked — forcing DEMO", "LIVE_LOCKED")
+    if status == "ANALYSIS_FAILED" or decision.error and status == "ANALYSIS_FAILED":
+        return GateResult(False, f"ANALYSIS FAILED: {decision.error or decision.thesis}", "ANALYSIS_FAILED")
     if action == "HOLD":
         return GateResult(False, "TradingAgents stayed flat", "HOLD")
+    if not synced:
+        return GateResult(False, "exchange synchronization incomplete", "NOT_SYNCED")
     if not connected:
         return GateResult(False, "exchange connectivity failed", "NO_EXCHANGE")
     if snap is None or snap.price <= 0:
@@ -58,6 +65,12 @@ def execution_gate(
         dd = (equity - start_equity) / start_equity * 100.0
         if dd <= -abs(settings.max_daily_loss_pct):
             return GateResult(False, f"daily loss {dd:.2f}% hit circuit breaker", "DAILY_LOSS")
+    if decision.confidence_provided and decision.confidence < settings.min_confidence:
+        return GateResult(
+            False,
+            f"confidence {decision.confidence:.2f} < {settings.min_confidence:.2f}",
+            "LOW_CONF",
+        )
     if action == "BUY":
         if decision.symbol in open_symbols:
             return GateResult(False, "equivalent position already open", "DUPLICATE")
@@ -67,17 +80,21 @@ def execution_gate(
             )
         size_pct = decision.position_size or 0.0
         if size_pct <= 0:
-            size_pct = 0.10 if not settings.small_account else 0.92
+            size_pct = min(0.90, float(settings.max_position_percent) or 0.25)
+        if size_pct >= 0.999:
+            return GateResult(False, "position_size=100% is forbidden", "FULL_ACCOUNT")
         notional = equity * size_pct
         floor = max(1.0, float(settings.min_notional))
         if notional + 1e-9 < floor:
             return GateResult(
                 False,
-                f"POSITION TOO SMALL Required: ${floor:.2f} Available: ${notional:.2f}",
+                f"BELOW EXCHANGE MINIMUM Required: ${floor:.2f} Available: ${notional:.2f}",
                 "TOO_SMALL",
             )
-        if cash + 1e-9 < notional:
+        if cash + 1e-9 < min(notional, floor):
             return GateResult(False, "insufficient available balance", "NO_CASH")
+        if exposure + notional > equity * settings.max_exposure + 1e-9:
+            return GateResult(False, "maximum total exposure exceeded", "EXPOSURE")
         if last_trade_iso and settings.cooldown_minutes > 0:
             try:
                 last = datetime.fromisoformat(last_trade_iso)

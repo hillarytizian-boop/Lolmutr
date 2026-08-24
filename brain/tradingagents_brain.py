@@ -181,7 +181,14 @@ class TradingAgentsBrain:
                 f"TradingAgents is offline: {detail}. "
                 "Staying flat. Paste NVIDIA_API_KEY in setup to run the firm on GLM-5.2."
             )
-            return TradeDecision.hold(symbol, thesis, cycle_id=cycle_id, error=detail)
+            return TradeDecision.hold(
+                symbol,
+                thesis,
+                cycle_id=cycle_id,
+                error=detail,
+                status="HOLD",
+                stages={name: "SKIPPED" for name in STAGES},
+            )
 
         graph = self._graph_or_none()
         if graph is None:
@@ -196,11 +203,10 @@ class TradingAgentsBrain:
                     market_blob=market_note or f"symbol={symbol}",
                     on_stage=on_stage,
                 )
-            return TradeDecision.hold(
+            return TradeDecision.failed(
                 symbol,
                 f"TradingAgents failed to initialize: {self._init_error}",
                 cycle_id=cycle_id,
-                error=self._init_error,
             )
 
         ticker = to_yahoo(symbol)

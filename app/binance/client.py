@@ -162,6 +162,64 @@ class BinanceSigned:
                 "type": "MARKET",
                 "quantity": f"{qty:.8f}".rstrip("0").rstrip("."),
                 "newOrderRespType": "FULL",
+                "newClientOrderId": f"LM{int(time.time() * 1000)}",
+            },
+        )
+
+    def query_order(self, symbol: str, order_id: str | int | None = None, client_id: str | None = None) -> dict[str, Any]:
+        pair = to_binance(symbol)
+        params: dict[str, Any] = {"symbol": pair}
+        if order_id is not None:
+            params["orderId"] = order_id
+        if client_id:
+            params["origClientOrderId"] = client_id
+        return self._signed("GET", "/api/v3/order", params)
+
+    def open_orders(self, symbol: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {}
+        if symbol:
+            params["symbol"] = to_binance(symbol)
+        data = self._signed("GET", "/api/v3/openOrders", params)
+        return data if isinstance(data, list) else []
+
+    def my_trades(self, symbol: str, limit: int = 20) -> list[dict[str, Any]]:
+        data = self._signed("GET", "/api/v3/myTrades", {"symbol": to_binance(symbol), "limit": limit})
+        return data if isinstance(data, list) else []
+
+    def cancel_order(self, symbol: str, order_id: str | int) -> dict[str, Any]:
+        return self._signed(
+            "DELETE",
+            "/api/v3/order",
+            {"symbol": to_binance(symbol), "orderId": order_id},
+        )
+
+    def cancel_open_orders(self, symbol: str) -> Any:
+        return self._signed("DELETE", "/api/v3/openOrders", {"symbol": to_binance(symbol)})
+
+    def oco_order(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        stop: float,
+        take: float,
+    ) -> dict[str, Any]:
+        pair = to_binance(symbol)
+        qty = quantize_qty(pair, quantity)
+        if qty <= 0:
+            raise BinanceError("quantity below Binance LOT_SIZE / MIN_NOTIONAL")
+        side_u = side.upper()
+        return self._signed(
+            "POST",
+            "/api/v3/order/oco",
+            {
+                "symbol": pair,
+                "side": side_u,
+                "quantity": f"{qty:.8f}".rstrip("0").rstrip("."),
+                "price": f"{take:.8f}".rstrip("0").rstrip("."),
+                "stopPrice": f"{stop:.8f}".rstrip("0").rstrip("."),
+                "stopLimitPrice": f"{stop:.8f}".rstrip("0").rstrip("."),
+                "stopLimitTimeInForce": "GTC",
             },
         )
 

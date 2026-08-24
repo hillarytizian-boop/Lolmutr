@@ -1,4 +1,4 @@
-"""JSON cockpit state — decisions, trades, halt flags."""
+"""JSON cockpit state — decisions, trades, halt flags, brackets."""
 
 from __future__ import annotations
 
@@ -15,6 +15,11 @@ def utc_day() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def trade_id(symbol: str, when: datetime | None = None) -> str:
+    stamp = (when or datetime.now(timezone.utc)).strftime("%Y%m%d-%H%M%S")
+    return f"TRADE-{stamp}-{symbol}"
+
+
 @dataclass
 class CockpitState:
     day: str = field(default_factory=utc_day)
@@ -22,9 +27,15 @@ class CockpitState:
     last_trade: dict[str, str] = field(default_factory=dict)
     halted: bool = False
     paused: bool = False
+    emergency: bool = False
     goal_hit: bool = False
     decisions: list[dict[str, Any]] = field(default_factory=list)
+    trades: list[dict[str, Any]] = field(default_factory=list)
+    brackets: dict[str, Any] = field(default_factory=dict)
     cycle: int = 0
+    synced: bool = True
+    page: str = "main"
+    cycle_log: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,9 +44,15 @@ class CockpitState:
             "last_trade": self.last_trade,
             "halted": self.halted,
             "paused": self.paused,
+            "emergency": self.emergency,
             "goal_hit": self.goal_hit,
             "decisions": self.decisions[-80:],
+            "trades": self.trades[-80:],
+            "brackets": self.brackets,
             "cycle": self.cycle,
+            "synced": self.synced,
+            "page": self.page,
+            "cycle_log": self.cycle_log[-40:],
         }
 
     @classmethod
@@ -46,9 +63,15 @@ class CockpitState:
             last_trade=dict(data.get("last_trade") or {}),
             halted=bool(data.get("halted")),
             paused=bool(data.get("paused")),
+            emergency=bool(data.get("emergency")),
             goal_hit=bool(data.get("goal_hit")),
             decisions=list(data.get("decisions") or []),
+            trades=list(data.get("trades") or []),
+            brackets=dict(data.get("brackets") or {}),
             cycle=int(data.get("cycle") or 0),
+            synced=bool(data.get("synced", True)),
+            page=str(data.get("page") or "main"),
+            cycle_log=list(data.get("cycle_log") or []),
         )
 
 
