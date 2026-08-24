@@ -1,0 +1,5 @@
+# Core — enough for Termux `python -m app setup` / `trade`.
+# No pydantic/FastAPI: those need Rust on Python 3.14 Android.
+httpx>=0.27.0
+python-dotenv>=1.0.0
+rich>=13.7.0
